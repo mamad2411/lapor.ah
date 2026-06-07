@@ -9,18 +9,24 @@ export function getAdminApp() {
   const projectId = process.env.FIREBASE_PROJECT_ID?.trim();
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
   let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const storageBucket = (process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "")
+    .replace("gs://", "")
+    .replace(/\/$/, "")
+    .trim();
 
   if (getApps().length > 0) {
     return getApps()[0];
   }
 
   if (!projectId || !clientEmail || !privateKey) {
-    throw new Error(`Firebase Config Missing: ID=${projectId}, Email=${clientEmail}`);
+    throw new Error(`Firebase Admin Config Missing: ProjectID=${projectId ? 'OK' : 'MISSING'}, Email=${clientEmail ? 'OK' : 'MISSING'}, Key=${privateKey ? 'OK' : 'MISSING'}`);
   }
 
-  // PEMBERSIHAN KUNCI (Final working version)
-  // Berdasarkan test_key.js, format yang paling stabil adalah mengganti literal \n dengan newline asli
-  privateKey = privateKey.trim().replace(/^"|"$/g, "");
+  // PEMBERSIHAN KUNCI
+  // 1. Hilangkan tanda kutip di awal/akhir jika ada (sering terjadi di Netlify/Vercel)
+  privateKey = privateKey.trim().replace(/^['"]|['"]$/g, "");
+  
+  // 2. Ganti literal \n dengan newline asli
   if (privateKey.includes("\\n")) {
     privateKey = privateKey.replace(/\\n/g, "\n");
   }
@@ -38,6 +44,7 @@ export function getAdminApp() {
         clientEmail,
         privateKey,
       }),
+      storageBucket,
     });
     return adminApp;
   } catch (err) {

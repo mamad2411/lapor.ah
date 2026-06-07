@@ -32,17 +32,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Ukuran file maksimal 50 MB" }, { status: 400 });
     }
 
-    const bucket = process.env.FIREBASE_STORAGE_BUCKET;
-    if (!bucket) {
-      return NextResponse.json({ error: "FIREBASE_STORAGE_BUCKET tidak dikonfigurasi" }, { status: 500 });
-    }
-
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "-")}`;
     const storagePath = `${uploadPath}/${fileName}`;
 
     const storage = adminStorage();
-    const fileRef = storage.bucket(bucket).file(storagePath);
+    const bucket = storage.bucket();
+
+    if (!bucket.name) {
+      return NextResponse.json(
+        { error: "Firebase Storage Bucket belum dikonfigurasi di environment variabel." },
+        { status: 500 }
+      );
+    }
+
+    const fileRef = bucket.file(storagePath);
 
     await fileRef.save(buffer, {
       metadata: { contentType: file.type },
@@ -51,9 +55,19 @@ export async function POST(req: Request) {
     const url = await getDownloadURL(fileRef);
 
     return NextResponse.json({ url });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Gagal mengunggah file";
-    console.error("[storage/upload] error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (err: any) {
+    const message = err?.message || "Gagal mengunggah file";
+    const stack = process.env.NODE_ENV === "development" ? err?.stack : undefined;
+    
+    console.error("[storage/upload] error:", message, err);
+    
+    return NextResponse.json(
+      { 
+        error: message,
+        details: err?.code || err?.name,
+        stack
+      }, 
+      { status: 500 }
+    );
   }
 }
