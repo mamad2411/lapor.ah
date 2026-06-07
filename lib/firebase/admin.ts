@@ -41,6 +41,19 @@ export function getAdminApp() {
     privateKey = `-----BEGIN PRIVATE KEY-----\n${privateKey}\n-----END PRIVATE KEY-----`;
   }
 
+  // Double check multiline: Jika masih satu baris tapi sangat panjang, paksa pecah setiap 64 karakter (RFC 7468)
+  // Tapi hanya lakukan ini pada bagian di antara header dan footer
+  const header = "-----BEGIN PRIVATE KEY-----";
+  const footer = "-----END PRIVATE KEY-----";
+  let content = privateKey.replace(header, "").replace(footer, "").trim();
+  
+  if (!content.includes("\n") && content.length > 100) {
+    // Pecah menjadi baris-baris 64 karakter
+    const lines = content.match(/.{1,64}/g);
+    if (lines) {
+      privateKey = `${header}\n${lines.join("\n")}\n${footer}`;
+    }
+  }
 
   try {
     adminApp = initializeApp({

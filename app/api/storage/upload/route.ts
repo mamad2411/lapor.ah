@@ -42,12 +42,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Ukuran file maksimal 50 MB" }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
+    let buffer;
+    try {
+      buffer = Buffer.from(await file.arrayBuffer());
+    } catch (bufErr) {
+      console.error("[storage/upload] Failed to convert file to buffer:", bufErr);
+      return NextResponse.json({ error: "Gagal memproses file di server." }, { status: 500 });
+    }
+
     const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "-")}`;
     const storagePath = `${uploadPath}/${fileName}`;
 
     const storage = adminStorage();
-    const bucket = storage.bucket();
+    let bucket;
+    try {
+      bucket = storage.bucket();
+    } catch (bucketErr: any) {
+      console.error("[storage/upload] adminStorage().bucket() failed:", bucketErr);
+      return NextResponse.json({ 
+        error: "Gagal menginisialisasi bucket Storage.",
+        details: bucketErr.message
+      }, { status: 500 });
+    }
 
     if (!bucket.name) {
       // Fallback: coba ambil bucket name dari environment jika bucket default kosong
