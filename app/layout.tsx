@@ -1,7 +1,6 @@
 import React from "react"
 import type { Metadata } from 'next'
 import { Instrument_Sans, Instrument_Serif, JetBrains_Mono } from 'next/font/google'
-import { AnalyticsDeferred } from '@/components/analytics-deferred'
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { ScrollToTop } from "@/components/scroll-to-top"
@@ -52,7 +51,6 @@ export default function RootLayout({
           {children}
           <Toaster position="top-center" richColors />
         </ThemeProvider>
-        <AnalyticsDeferred />
       </body>
     </html>
   )
