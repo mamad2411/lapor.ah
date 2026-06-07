@@ -86,6 +86,9 @@ export interface DiskusiPost {
   stickerUrl?: string;
   stickers?: { id?: string; url?: string }[];
   adminRating?: DesaPostRating;
+  likes?: number;
+  comments?: number;
+  shares?: number;
   createdAt: string;
 }
 

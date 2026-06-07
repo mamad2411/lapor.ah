@@ -164,6 +164,14 @@ export default function AdminProfilePage() {
     }
 
     const type = file.type.startsWith("video/") ? "video" : "image";
+
+    if (type === "video") {
+      const confirmUpload = window.confirm(
+        "Peringatan Video: Video akan diunggah tanpa suara (backsound tidak didukung). Lanjutkan?"
+      );
+      if (!confirmUpload) return;
+    }
+
     const fd = new FormData();
     fd.append("file", file);
     fd.append("path", "diskusi");

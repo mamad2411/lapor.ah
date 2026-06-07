@@ -7,10 +7,6 @@ type AnimatedMegaphoneProps = {
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
-type AnimatedMegaphoneProps = {
-  className?: string;
-};
-
 export function AnimatedMegaphone({ className }: AnimatedMegaphoneProps) {
   const { theme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);

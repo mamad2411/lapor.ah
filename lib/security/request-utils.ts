@@ -17,9 +17,9 @@ export function isCountryBlocked(req: NextRequest): boolean {
   return false;
 }
 
-export function isHighThreat(req: NextRequest): boolean {
+export function isHighThreat(req: NextRequest, threshold: number = 10): boolean {
   const score = parseInt(req.headers.get("cf-threat-score") || "0");
-  return score > 10;
+  return score > threshold;
 }
 
 export function makeRateLimitKey(req: NextRequest, category: string): string {
@@ -27,10 +27,14 @@ export function makeRateLimitKey(req: NextRequest, category: string): string {
   return `ratelimit:${category}:${ip}`;
 }
 
-export function rateLimitHeaders(limit: number, remaining: number, reset: number): Record<string, string> {
-  return {
+export function rateLimitHeaders(limit: number, remaining: number, reset: number, retryAfterSec?: number): Record<string, string> {
+  const headers: Record<string, string> = {
     "X-RateLimit-Limit": String(limit),
     "X-RateLimit-Remaining": String(remaining),
     "X-RateLimit-Reset": String(reset),
   };
+  if (retryAfterSec !== undefined) {
+    headers["Retry-After"] = String(retryAfterSec);
+  }
+  return headers;
 }

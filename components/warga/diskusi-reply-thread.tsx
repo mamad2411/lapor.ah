@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { StickerPicker } from "./sticker-picker";
 import { getStickerById } from "@/lib/warga/stickers";
-import type { DiskusiReply } from "@/lib/warga/types";
+import type { DiskusiReply, StickerItem } from "@/lib/warga/types";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 

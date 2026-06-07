@@ -83,6 +83,9 @@ export async function POST(req: Request) {
     const file = formData.get("file");
     const uploadPath = ((formData.get("path") as string) || "uploads").replace(/[^a-zA-Z0-9/_-]/g, "");
 
+    // Validasi tambahan untuk diskusi dan profile desa (tidak boleh ada audio/backsound di video)
+    const isDiscussionOrProfile = uploadPath.includes("diskusi") || uploadPath.includes("desa") || uploadPath.includes("profile");
+
     if (!file || !(file instanceof Blob)) {
       return NextResponse.json({ error: "File tidak ditemukan" }, { status: 400 });
     }
@@ -96,6 +99,11 @@ export async function POST(req: Request) {
       "audio/mpeg", "audio/wav", "audio/ogg", "audio/webm",
       "application/pdf",
     ];
+
+    // Jika upload ke diskusi/desa, blokir tipe audio langsung
+    if (isDiscussionOrProfile && fileType.startsWith("audio/")) {
+      return NextResponse.json({ error: "Format audio tidak didukung untuk modul ini." }, { status: 400 });
+    }
 
     // Beberapa browser Windows tidak set MIME type — deteksi dari ekstensi
     if (!allowedTypes.includes(fileType)) {

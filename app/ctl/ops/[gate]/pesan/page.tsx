@@ -16,19 +16,23 @@ import { Bot, User, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Message = {
-  id: string;
-  sender: "warga" | "bot" | "petugas";
-  body: string;
-  createdAt: string;
+  role: "user" | "bot" | "admin";
+  content: string;
+  at: string;
+  templateId?: string;
 };
 
 type Thread = {
-  ticketId: string;
+  id: string;
+  villageId: string;
   villageName: string;
-  status: "bot" | "human" | "closed";
+  status: string;
+  messageCount: number;
   lastMessage: string;
-  updatedAt: string;
+  lastRole: string;
   messages: Message[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 const roleIcon: Record<string, typeof User> = {

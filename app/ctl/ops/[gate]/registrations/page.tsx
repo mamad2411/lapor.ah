@@ -23,6 +23,10 @@ type Registration = {
   documents: { type: string; url: string; number?: string }[];
   status: string;
   createdAt: string;
+  latitude?: string;
+  longitude?: string;
+  documentValid?: boolean | null;
+  documentScore?: number | null;
 };
 
 export default function OpsRegistrationsPage() {

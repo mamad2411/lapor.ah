@@ -63,20 +63,30 @@ const nextConfig = {
           { key: "Pragma", value: "no-cache" },
           { key: "Expires", value: "0" },
           { key: "X-Content-Type-Options", value: "nosniff" },
-          // Explisit CORS untuk API — sesuaikan origin di produksi
-          {
-            key: "Access-Control-Allow-Origin",
-            value:
-              process.env.NODE_ENV === "production"
-                ? process.env.NEXT_PUBLIC_APP_URL || "https://laporah.netlify.app"
-                : "http://localhost:3000",
-          },
-          { key: "Access-Control-Allow-Methods", value: "GET, POST, PUT, DELETE, OPTIONS" },
-          {
-            key: "Access-Control-Allow-Headers",
-            value: "Content-Type, Authorization, X-Requested-With",
-          },
-          { key: "Access-Control-Max-Age", value: "3600" },
+        ],
+      },
+      {
+        source: "/diskusi/:path*",
+        headers: [
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+        ],
+      },
+      {
+        source: "/laporan/:path*",
+        headers: [
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+        ],
+      },
+      {
+        source: "/uploads/:path*",
+        headers: [
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
         ],
       },
     ];

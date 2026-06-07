@@ -15,7 +15,7 @@
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { generateNonce, buildCsp } from "@/lib/security/csp";
+import { generateNonce, buildCsp } from "./lib/security/csp";
 import {
   getClientIp,
   getCfRay,
@@ -24,7 +24,7 @@ import {
   isHighThreat,
   makeRateLimitKey,
   rateLimitHeaders,
-} from "@/lib/security/request-utils";
+} from "./lib/security/request-utils";
 import {
   checkRateLimit,
   LIMIT_OTP_SEND,
@@ -35,7 +35,7 @@ import {
   LIMIT_UPLOAD,
   LIMIT_PUBLIC,
   LIMIT_ADMIN,
-} from "@/lib/security/rate-limit";
+} from "./lib/security/rate-limit";
 
 // ── Cookie name untuk sesi ops ──────────────────────────────────────────────
 const OPS_COOKIE = "__lapor_ops_v1";
@@ -72,12 +72,46 @@ const BASE_SECURITY_HEADERS: Record<string, string> = {
 
 // ── Helper: tambahkan semua security headers ke response ────────────────────
 function applySecurityHeaders(
+  req: NextRequest,
   res: NextResponse,
   extraHeaders?: Record<string, string>
 ): NextResponse {
+  const { pathname } = req.nextUrl;
+  const isApi = pathname.startsWith("/api/");
+  const isShared =
+    isApi ||
+    pathname.startsWith("/diskusi/") ||
+    pathname.startsWith("/laporan/") ||
+    pathname.startsWith("/uploads/") ||
+    /\.(png|jpg|jpeg|gif|webp|svg|mp4|webm|mp3|wav|ogg|pdf)$/i.test(pathname);
+
   for (const [k, v] of Object.entries(BASE_SECURITY_HEADERS)) {
-    res.headers.set(k, v);
+    if (isShared && k === "Cross-Origin-Resource-Policy") {
+      res.headers.set(k, "cross-origin");
+    } else if (isShared && k === "Cross-Origin-Embedder-Policy") {
+      res.headers.set(k, "unsafe-none");
+    } else if (isShared && k === "Cross-Origin-Opener-Policy") {
+      res.headers.set(k, "unsafe-none");
+    } else {
+      res.headers.set(k, v);
+    }
   }
+
+  if (isApi) {
+    const origin = req.headers.get("origin") || "";
+    const isAllowedOrigin =
+      process.env.NODE_ENV !== "production" ||
+      origin === "https://laporah.netlify.app" ||
+      origin === process.env.NEXT_PUBLIC_APP_URL;
+
+    if (isAllowedOrigin && origin) {
+      res.headers.set("Access-Control-Allow-Origin", origin);
+      res.headers.set("Access-Control-Allow-Credentials", "true");
+    }
+    res.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  }
+
   if (extraHeaders) {
     for (const [k, v] of Object.entries(extraHeaders)) {
       res.headers.set(k, v);
@@ -87,22 +121,22 @@ function applySecurityHeaders(
 }
 
 // ── Helper: kembalikan 403 Forbidden dengan security headers ─────────────────
-function forbidden(reason: string, retryAfter?: number): NextResponse {
+function forbidden(req: NextRequest, reason: string, retryAfter?: number): NextResponse {
   const res = NextResponse.json(
     { error: "Forbidden", reason },
     { status: 403 }
   );
   if (retryAfter) res.headers.set("Retry-After", String(retryAfter));
-  return applySecurityHeaders(res);
+  return applySecurityHeaders(req, res);
 }
 
 // ── Helper: kembalikan 429 Too Many Requests ──────────────────────────────────
-function tooManyRequests(retryAfterSec: number, remaining: number, resetAt: number): NextResponse {
+function tooManyRequests(req: NextRequest, limit: number, remaining: number, resetAt: number, retryAfterSec: number): NextResponse {
   const res = NextResponse.json(
     { error: "Terlalu banyak permintaan. Coba lagi nanti.", retryAfter: retryAfterSec },
     { status: 429 }
   );
-  return applySecurityHeaders(res, rateLimitHeaders(remaining, resetAt, retryAfterSec));
+  return applySecurityHeaders(req, res, rateLimitHeaders(limit, remaining, resetAt, retryAfterSec));
 }
 
 // ── Helper: ambil rate limit config untuk pathname ───────────────────────────
@@ -150,42 +184,50 @@ export function middleware(req: NextRequest): NextResponse {
   const clientIp = getClientIp(req);
   const cfRay = getCfRay(req);
 
+  // ── OPTIONS Preflight Handling untuk /api/ ──────────────────────────────────
+  if (pathname.startsWith("/api/") && req.method === "OPTIONS") {
+    const res = new NextResponse(null, { status: 204 });
+    return applySecurityHeaders(req, res);
+  }
+
   // ── 1. Block scanner bot user-agents ───────────────────────────────────────
   if (BAD_UA.test(ua)) {
-    return forbidden("bot-detected");
+    return forbidden(req, "bot-detected");
   }
 
   // ── 2. Block suspicious path patterns ─────────────────────────────────────
   try {
     if (SUSPICIOUS_PATH.test(decodeURIComponent(pathname))) {
       return applySecurityHeaders(
+        req,
         NextResponse.json({ error: "Bad Request" }, { status: 400 })
       );
     }
   } catch {
     // decodeURIComponent dapat throw pada string malformed
     return applySecurityHeaders(
+      req,
       NextResponse.json({ error: "Bad Request" }, { status: 400 })
     );
   }
 
   // ── 3. Country block (aktifkan di cloudflare.ts jika diperlukan) ──────────
   if (isCountryBlocked(req)) {
-    return forbidden("country-blocked");
+    return forbidden(req, "country-blocked");
   }
 
   // ── 4. Cloudflare Threat Score — blokir traffic berisiko tinggi ──────────
   if (isBehindCloudflare(req) && isHighThreat(req, 25)) {
-    return forbidden("high-threat-score");
+    return forbidden(req, "high-threat-score");
   }
 
   // ── 5. Rate limiting per endpoint ─────────────────────────────────────────
   const rlConfig = getRateLimitConfig(pathname);
   if (rlConfig) {
-    const rlKey = makeRateLimitKey(pathname.split("/").slice(0, 4).join("/"), req);
+    const rlKey = makeRateLimitKey(req, pathname.split("/").slice(0, 4).join("/"));
     const rl = checkRateLimit(rlKey, rlConfig);
     if (!rl.allowed) {
-      return tooManyRequests(rl.retryAfterSec, rl.remaining, rl.resetAt);
+      return tooManyRequests(req, rlConfig.limit, rl.remaining, rl.resetAt, rl.retryAfterSec);
     }
   }
 
@@ -201,6 +243,7 @@ export function middleware(req: NextRequest): NextResponse {
       // Format: sid.nonce.exp.sig (4 segmen dipisah titik)
       if (!raw || raw.split(".").length !== 4) {
         return applySecurityHeaders(
+          req,
           NextResponse.json({ error: "Unauthorized" }, { status: 401 })
         );
       }
@@ -210,7 +253,7 @@ export function middleware(req: NextRequest): NextResponse {
       if (!Number.isFinite(exp) || Date.now() > exp) {
         const res = NextResponse.json({ error: "Session expired" }, { status: 401 });
         res.cookies.delete(OPS_COOKIE);
-        return applySecurityHeaders(res);
+        return applySecurityHeaders(req, res);
       }
     }
   }
@@ -226,7 +269,7 @@ export function middleware(req: NextRequest): NextResponse {
       if (!raw || parts?.length !== 4 || !Number.isFinite(exp) || Date.now() > exp) {
         const res = NextResponse.redirect(new URL("/", req.url));
         if (raw) res.cookies.delete(OPS_COOKIE);
-        return applySecurityHeaders(res);
+        return applySecurityHeaders(req, res);
       }
     }
   }
@@ -251,12 +294,12 @@ export function middleware(req: NextRequest): NextResponse {
   // Teruskan nonce ke page components via header (dibaca di layout.tsx)
   res.headers.set("x-nonce", nonce);
   res.headers.set("x-client-ip", clientIp);
-  res.headers.set("x-cf-ray", cfRay);
+  res.headers.set("x-cf-ray", cfRay || "");
 
   // CSP header
   res.headers.set("Content-Security-Policy", csp);
 
-  return applySecurityHeaders(res);
+  return applySecurityHeaders(req, res);
 }
 
 // ── Route matcher ──────────────────────────────────────────────────────────────
