@@ -11,11 +11,14 @@
  * inline scripts pada komponen server-side.
  */
 
-import { randomBytes } from "crypto";
-
 /** Generate nonce 128-bit acak yang aman untuk digunakan di script-src. */
 export function generateNonce(): string {
-  return randomBytes(16).toString("base64");
+  // Gunakan Web Crypto API yang kompatibel dengan Edge Runtime
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  
+  // Konversi byte array ke Base64 secara manual (Edge-friendly)
+  return btoa(String.fromCharCode(...array));
 }
 
 /**
