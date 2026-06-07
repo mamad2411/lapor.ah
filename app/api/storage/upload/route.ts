@@ -14,22 +14,14 @@ export async function POST(req: Request) {
     }
 
     const allowedTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-      "image/gif",
-      "video/mp4",
-      "video/quicktime",
-      "video/webm",
-      "audio/mpeg",
-      "audio/wav",
-      "audio/ogg",
-      "audio/webm",
+      "image/jpeg", "image/png", "image/webp", "image/gif",
+      "video/mp4", "video/quicktime", "video/webm",
+      "audio/mpeg", "audio/wav", "audio/ogg", "audio/webm",
       "application/pdf",
     ];
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json(
-        { error: `Format ${file.type} tidak didukung. Gunakan Gambar, Video (MP4/WebM), Audio (MP3/OGG), atau PDF.` },
+        { error: `Format ${file.type} tidak didukung.` },
         { status: 400 }
       );
     }
@@ -39,28 +31,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Ukuran file maksimal 50 MB" }, { status: 400 });
     }
 
+    const bucket = process.env.FIREBASE_STORAGE_BUCKET;
+    if (!bucket) {
+      return NextResponse.json({ error: "FIREBASE_STORAGE_BUCKET tidak dikonfigurasi" }, { status: 500 });
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "-")}`;
     const storagePath = `${uploadPath}/${fileName}`;
 
-    const bucket = adminStorage().bucket(process.env.FIREBASE_STORAGE_BUCKET);
-    const fileRef = bucket.file(storagePath);
+    const storage = adminStorage();
+    const fileRef = storage.bucket(bucket).file(storagePath);
 
     await fileRef.save(buffer, {
       metadata: { contentType: file.type },
+      public: true,
     });
 
-    // Buat public URL pakai signed URL dengan expiry 10 tahun
-    const [signedUrl] = await fileRef.getSignedUrl({
-      action: "read",
-      expires: Date.now() + 10 * 365 * 24 * 60 * 60 * 1000,
-    });
+    // Public URL langsung tanpa signed URL (tidak perlu service account permission khusus)
+    const encodedPath = encodeURIComponent(storagePath);
+    const url = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedPath}?alt=media`;
 
-    return NextResponse.json({ url: signedUrl });
+    return NextResponse.json({ url });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Gagal mengunggah file" },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : "Gagal mengunggah file";
+    console.error("[storage/upload] error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

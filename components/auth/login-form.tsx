@@ -80,6 +80,7 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import ReCAPTCHA from "react-google-recaptcha";
 import { getAuthClient } from "@/lib/firebase/client";
 import { buildAdminPanelPath } from "@/lib/admin/build-admin-url";
 
@@ -192,6 +193,8 @@ export function LoginForm() {
   const [attempts, setAttempts] = useState(0);
   const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
 
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
+
   function maskEmail(email: string) {
     const [local, domain] = email.split("@");
     return local.slice(0, 2) + "***@" + domain;
@@ -230,10 +233,16 @@ export function LoginForm() {
     setError("");
     setLoading(true);
     try {
+      const captchaToken = await recaptchaRef.current?.executeAsync();
+      recaptchaRef.current?.reset();
+
       const resolveRes = await fetch("/api/auth/resolve-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier: identifier.trim() }),
+        body: JSON.stringify({ 
+          identifier: identifier.trim(),
+          captchaToken
+        }),
       });
       const userData = await resolveRes.json();
       if (!resolveRes.ok) {
@@ -498,8 +507,15 @@ export function LoginForm() {
                 Akses diblokir. Coba lagi dalam {blockMinutesLeft()} menit.
               </p>
             )}
-            <Button type="submit" className="w-full h-11 rounded-full" disabled={loading || blocked}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Lanjut"}
+
+            <ReCAPTCHA
+              ref={recaptchaRef}
+              size="invisible"
+              sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+            />
+
+            <Button type="submit" className="w-full rounded-full" disabled={loading || blocked}>
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Lanjut"}
             </Button>
           </form>
         </AuthCard>

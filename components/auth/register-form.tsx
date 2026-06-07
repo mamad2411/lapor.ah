@@ -40,6 +40,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
+import ReCAPTCHA from "react-google-recaptcha";
 import { logSecurityEvent } from "@/lib/audit-log";
 import {
   DocumentUpload,
@@ -373,6 +374,8 @@ export function RegisterForm({ token }: Props) {
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
 
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
+
   const [loading, setLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
   const [phoneLoading, setPhoneLoading] = useState(false);
@@ -680,6 +683,9 @@ export function RegisterForm({ token }: Props) {
     setError("");
     setLoading(true);
     try {
+      const captchaToken = await recaptchaRef.current?.executeAsync();
+      recaptchaRef.current?.reset();
+
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -697,6 +703,7 @@ export function RegisterForm({ token }: Props) {
           profileImage,
           villageThumbnail,
           approvalDocument,
+          captchaToken,
           documentVerification: documentVerification
             ? {
                 valid: documentVerification.valid,
@@ -1434,6 +1441,12 @@ export function RegisterForm({ token }: Props) {
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {error}
               </p>
             )}
+
+            <ReCAPTCHA
+              ref={recaptchaRef}
+              size="invisible"
+              sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+            />
 
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1 rounded-full" onClick={() => setStep(4)}>

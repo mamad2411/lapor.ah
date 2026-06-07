@@ -7,6 +7,7 @@ import { adminDb, FieldValue } from "@/lib/firebase/admin";
 import { isVillageLocationTaken } from "@/lib/village-duplicate";
 import { verifyDocumentFromUrl } from "@/lib/document-verify";
 import { generateBackupCodes, hashBackupCodes } from "@/lib/backup-codes";
+import { verifyRecaptcha } from "@/lib/recaptcha";
 
 export const runtime = "nodejs";
 
@@ -24,6 +25,7 @@ const schema = z.object({
   profileImage: z.string().optional(),
   villageThumbnail: z.string().optional(),
   approvalDocument: z.string().min(1),
+  captchaToken: z.string().optional(),
   documentVerification: z
     .object({
       valid: z.boolean(),
@@ -44,6 +46,12 @@ const schema = z.object({
 export async function POST(req: Request) {
   try {
     const body = schema.parse(await req.json());
+
+    const isHuman = await verifyRecaptcha(body.captchaToken);
+    if (!isHuman) {
+      return NextResponse.json({ error: "Verifikasi reCAPTCHA gagal." }, { status: 400 });
+    }
+
     const tokenResult = await validateAccessToken(body.token, "register");
     if (!tokenResult.valid) {
       return NextResponse.json({ error: tokenResult.error }, { status: 400 });
