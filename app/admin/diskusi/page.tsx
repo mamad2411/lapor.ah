@@ -512,12 +512,6 @@ function AdminDiskusiContent() {
                     Preview aspirasi warga dan kirim tanggapan desa secara langsung.
                   </DialogDescription>
                 </div>
-                <button 
-                  onClick={() => setPreviewPost(null)} 
-                  className="rounded-full p-1.5 hover:bg-foreground/5 transition-colors absolute right-4 top-4"
-                >
-                  <X className="w-4 h-4" />
-                </button>
               </DialogHeader>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-6">

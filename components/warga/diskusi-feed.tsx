@@ -243,7 +243,7 @@ export function DiskusiFeed({ initialTag }: { initialTag?: string }) {
 
             {searchFocused && (
               <div 
-                className="absolute z-50 left-0 top-full mt-2 w-[320px] sm:w-[360px] rounded-2xl border border-primary/10 bg-popover/95 backdrop-blur-md shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2"
+                className="absolute z-50 left-0 top-full mt-2 w-full sm:w-[360px] rounded-2xl border border-primary/10 bg-popover/95 backdrop-blur-md shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2"
                 onMouseDown={(e) => {
                   // Prevent input blur before click handler runs
                   e.preventDefault();

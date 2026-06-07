@@ -166,7 +166,7 @@ export default function PublicVillageProfilePage() {
         </div>
 
         {/* Mobile Names & Description */}
-        <div className="pt-6 sm:pt-0 space-y-6">
+        <div className="pt-16 sm:pt-0 space-y-6">
           <div className="sm:hidden min-w-0 px-2 flex flex-col gap-3">
             <div>
               <h2 className="text-xl font-display font-black tracking-tight text-foreground">

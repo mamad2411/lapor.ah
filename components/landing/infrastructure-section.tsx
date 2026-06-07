@@ -58,7 +58,7 @@ export function InfrastructureSection() {
               yang bertanggung jawab di wilayah tersebut.
             </p>
 
-            <div className="grid grid-cols-3 gap-8">
+            <div className="grid grid-cols-3 gap-4 sm:gap-8">
               <div>
                 <div className="text-4xl lg:text-5xl font-display mb-2">6</div>
                 <div className="text-sm text-muted-foreground">Desa terdaftar</div>
