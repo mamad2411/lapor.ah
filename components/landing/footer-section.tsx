@@ -27,7 +27,7 @@ const footerLinks = {
   ],
   Akun: [
     { name: "Masuk", href: "/masuk" },
-    { name: "Daftar", href: "/auth/daftar" },
+    { name: "Daftar", href: "/auth/permintaan" },
   ],
 };
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminStorage } from "@/lib/firebase/admin";
+import { getDownloadURL } from "firebase-admin/storage";
 
 export const runtime = "nodejs";
 
@@ -45,12 +46,9 @@ export async function POST(req: Request) {
 
     await fileRef.save(buffer, {
       metadata: { contentType: file.type },
-      public: true,
     });
 
-    // Public URL langsung tanpa signed URL (tidak perlu service account permission khusus)
-    const encodedPath = encodeURIComponent(storagePath);
-    const url = `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodedPath}?alt=media`;
+    const url = await getDownloadURL(fileRef);
 
     return NextResponse.json({ url });
   } catch (err) {
