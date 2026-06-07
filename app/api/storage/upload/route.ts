@@ -1,28 +1,94 @@
 import { NextResponse } from "next/server";
-import { adminStorage } from "@/lib/firebase/admin";
+import { randomUUID } from "crypto";
+import { mkdir, writeFile } from "fs/promises";
+import path from "path";
 import { getDownloadURL } from "firebase-admin/storage";
+import { adminStorage } from "@/lib/firebase/admin";
 
 export const runtime = "nodejs";
 
-export async function POST(req: Request) {
+const NETLIFY_MAX_BYTES = 6 * 1024 * 1024;
+const LOCAL_MAX_BYTES = 50 * 1024 * 1024;
+
+function maxUploadBytes() {
+  return process.env.NODE_ENV === "development" ? LOCAL_MAX_BYTES : NETLIFY_MAX_BYTES;
+}
+
+function resolveBucketName() {
+  return (process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "")
+    .replace(/^gs:\/\//, "")
+    .replace(/\/$/, "")
+    .trim();
+}
+
+function buildFirebaseMediaUrl(bucketName: string, storagePath: string, token: string) {
+  const encoded = encodeURIComponent(storagePath);
+  return `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encoded}?alt=media&token=${token}`;
+}
+
+async function uploadToLocalPublic(uploadPath: string, safeName: string, buffer: Buffer) {
+  const dir = path.join(process.cwd(), "public", uploadPath);
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, safeName), buffer);
+  return `/${uploadPath}/${safeName}`;
+}
+
+async function uploadToFirebase(
+  bucketName: string,
+  storagePath: string,
+  buffer: Buffer,
+  fileType: string
+) {
+  const bucket = adminStorage().bucket(bucketName);
+  const fileRef = bucket.file(storagePath);
+  const downloadToken = randomUUID();
+
+  await fileRef.save(buffer, {
+    metadata: {
+      contentType: fileType,
+      cacheControl: "public, max-age=31536000",
+      metadata: {
+        firebaseStorageDownloadTokens: downloadToken,
+      },
+    },
+  });
+
   try {
-    let formData;
-    try {
-      formData = await req.formData();
-    } catch (e) {
-      console.error("[storage/upload] Failed to parse formData:", e);
+    return await getDownloadURL(fileRef);
+  } catch {
+    return buildFirebaseMediaUrl(bucketName, storagePath, downloadToken);
+  }
+}
+
+export async function POST(req: Request) {
+  const limit = maxUploadBytes();
+
+  try {
+    const contentLength = Number(req.headers.get("content-length") || 0);
+    if (contentLength > limit) {
       return NextResponse.json(
-        { error: "Gagal membaca data form. Pastikan ukuran file tidak melebihi batas (Netlify: 6MB)." },
-        { status: 400 }
+        { error: `Ukuran file maksimal ${Math.round(limit / 1024 / 1024)} MB.` },
+        { status: 413 }
       );
     }
 
-    const file = formData.get("file") as File;
-    const uploadPath = (formData.get("path") as string) || "uploads";
+    let formData: FormData;
+    try {
+      formData = await req.formData();
+    } catch (e) {
+      console.error("[storage/upload] formData error:", e);
+      return NextResponse.json({ error: "Gagal membaca file upload." }, { status: 400 });
+    }
 
-    if (!file) {
+    const file = formData.get("file");
+    const uploadPath = ((formData.get("path") as string) || "uploads").replace(/[^a-zA-Z0-9/_-]/g, "");
+
+    if (!file || !(file instanceof Blob)) {
       return NextResponse.json({ error: "File tidak ditemukan" }, { status: 400 });
     }
+
+    const fileName = (file as File).name || "upload";
+    let fileType = file.type || "application/octet-stream";
 
     const allowedTypes = [
       "image/jpeg", "image/png", "image/webp", "image/gif",
@@ -30,89 +96,81 @@ export async function POST(req: Request) {
       "audio/mpeg", "audio/wav", "audio/ogg", "audio/webm",
       "application/pdf",
     ];
-    if (!allowedTypes.includes(file.type)) {
+
+    // Beberapa browser Windows tidak set MIME type — deteksi dari ekstensi
+    if (!allowedTypes.includes(fileType)) {
+      const ext = fileName.split(".").pop()?.toLowerCase();
+      const byExt: Record<string, string> = {
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        webp: "image/webp",
+        gif: "image/gif",
+        mp4: "video/mp4",
+        mov: "video/quicktime",
+        webm: "video/webm",
+        ogg: "audio/ogg",
+        pdf: "application/pdf",
+      };
+      if (ext && byExt[ext]) fileType = byExt[ext];
+    }
+
+    if (!allowedTypes.includes(fileType)) {
+      return NextResponse.json({ error: `Format file tidak didukung (${fileType}).` }, { status: 400 });
+    }
+
+    if (file.size > limit) {
       return NextResponse.json(
-        { error: `Format ${file.type} tidak didukung.` },
-        { status: 400 }
+        { error: `Ukuran file maksimal ${Math.round(limit / 1024 / 1024)} MB.` },
+        { status: 413 }
       );
     }
 
-    const maxSize = 50 * 1024 * 1024;
-    if (file.size > maxSize) {
-      return NextResponse.json({ error: "Ukuran file maksimal 50 MB" }, { status: 400 });
-    }
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const safeName = `${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.]/g, "-")}`;
+    const storagePath = `${uploadPath}/${safeName}`;
 
-    let buffer;
-    try {
-      buffer = Buffer.from(await file.arrayBuffer());
-    } catch (bufErr) {
-      console.error("[storage/upload] Failed to convert file to buffer:", bufErr);
-      return NextResponse.json({ error: "Gagal memproses file di server." }, { status: 500 });
-    }
+    const bucketName = resolveBucketName();
+    let url: string;
+    let storage: "firebase" | "local" = "firebase";
 
-    const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "-")}`;
-    const storagePath = `${uploadPath}/${fileName}`;
-
-    const storage = adminStorage();
-    let bucket;
-    try {
-      bucket = storage.bucket();
-    } catch (bucketErr: any) {
-      console.error("[storage/upload] adminStorage().bucket() failed:", bucketErr);
-      return NextResponse.json({ 
-        error: "Gagal menginisialisasi bucket Storage.",
-        details: bucketErr.message
-      }, { status: 500 });
-    }
-
-    if (!bucket.name) {
-      // Fallback: coba ambil bucket name dari environment jika bucket default kosong
-      const envBucket = (process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "")
-        .replace("gs://", "").replace(/\/$/, "").trim();
-      
-      if (!envBucket) {
-        return NextResponse.json(
-          { error: "Firebase Storage Bucket belum dikonfigurasi di environment variabel." },
-          { status: 500 }
-        );
+    if (bucketName) {
+      try {
+        url = await uploadToFirebase(bucketName, storagePath, buffer, fileType);
+      } catch (firebaseErr) {
+        console.error("[storage/upload] Firebase error:", firebaseErr);
+        if (process.env.NODE_ENV === "development") {
+          url = await uploadToLocalPublic(uploadPath, safeName, buffer);
+          storage = "local";
+        } else {
+          throw firebaseErr;
+        }
       }
-      
-      const manualBucket = storage.bucket(envBucket);
-      const fileRef = manualBucket.file(storagePath);
-      await fileRef.save(buffer, { metadata: { contentType: file.type } });
-      const url = await getDownloadURL(fileRef);
-      return NextResponse.json({ url });
+    } else if (process.env.NODE_ENV === "development") {
+      url = await uploadToLocalPublic(uploadPath, safeName, buffer);
+      storage = "local";
+    } else {
+      return NextResponse.json(
+        { error: "FIREBASE_STORAGE_BUCKET belum dikonfigurasi." },
+        { status: 500 }
+      );
     }
 
-    const fileRef = bucket.file(storagePath);
-
-    await fileRef.save(buffer, {
-      metadata: { contentType: file.type },
-    });
-
-    let url;
-    try {
-      url = await getDownloadURL(fileRef);
-    } catch (urlErr) {
-      console.warn("[storage/upload] getDownloadURL failed, trying fallback publicUrl");
-      // Fallback: jika getDownloadURL gagal, coba jadikan publik
-      await fileRef.makePublic();
-      url = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
-    }
-
-    return NextResponse.json({ url });
-  } catch (err: any) {
-    const message = err?.message || "Gagal mengunggah file";
-    const stack = process.env.NODE_ENV === "development" ? err?.stack : undefined;
-    
-    console.error("[storage/upload] error:", message, err);
-    
+    return NextResponse.json({ url, storage });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal mengunggah file";
+    const code = (err as { code?: number | string })?.code;
+    console.error("[storage/upload] error:", message, code, err);
     return NextResponse.json(
-      { 
+      {
         error: message,
-        details: err?.code || err?.name,
-        stack
-      }, 
+        hint:
+          code === 404
+            ? "Bucket Storage belum ada — aktifkan Firebase Storage di console."
+            : code === 403
+              ? "Service account butuh role Storage Object Admin."
+              : undefined,
+      },
       { status: 500 }
     );
   }

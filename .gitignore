@@ -37,3 +37,8 @@ Thumbs.db
 
 # Local Netlify folder
 .netlify
+
+# User uploads (local dev fallback)
+/public/uploads/
+/public/diskusi/
+/public/registrations/

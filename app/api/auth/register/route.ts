@@ -7,7 +7,7 @@ import { adminDb, FieldValue } from "@/lib/firebase/admin";
 import { isVillageLocationTaken } from "@/lib/village-duplicate";
 import { verifyDocumentFromUrl } from "@/lib/document-verify";
 import { generateBackupCodes, hashBackupCodes } from "@/lib/backup-codes";
-import { verifyRecaptcha } from "@/lib/recaptcha";
+import { verifyDualCaptcha } from "@/lib/captcha";
 
 export const runtime = "nodejs";
 
@@ -25,7 +25,9 @@ const schema = z.object({
   profileImage: z.string().optional(),
   villageThumbnail: z.string().optional(),
   approvalDocument: z.string().min(1),
+  /** @deprecated pakai captchaToken untuk reCAPTCHA — digantikan turnstileToken */
   captchaToken: z.string().optional(),
+  turnstileToken: z.string().optional(),
   documentVerification: z
     .object({
       valid: z.boolean(),
@@ -47,9 +49,13 @@ export async function POST(req: Request) {
   try {
     const body = schema.parse(await req.json());
 
-    const isHuman = await verifyRecaptcha(body.captchaToken);
-    if (!isHuman) {
-      return NextResponse.json({ error: "Verifikasi reCAPTCHA gagal." }, { status: 400 });
+    const captchaResult = await verifyDualCaptcha({
+      turnstileToken: body.turnstileToken,
+      recaptchaToken: body.captchaToken,
+      remoteIp: req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || undefined,
+    });
+    if (!captchaResult.ok) {
+      return NextResponse.json({ error: captchaResult.error || "Verifikasi keamanan gagal." }, { status: 400 });
     }
 
     const tokenResult = await validateAccessToken(body.token, "register");

@@ -30,7 +30,8 @@ import {
   Play,
   AudioLines,
   Vote,
-  LayoutGrid
+  LayoutGrid,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -222,21 +223,21 @@ function CompareContent() {
     clearInterval(timerRef.current);
   };
 
-  const uploadMedia = async (file: File, type: "image" | "video") => {
+  const uploadMedia = async (file: File, type: "image" | "video" | "document") => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("path", "compare");
     try {
-      toast.loading("Mengunggah media...", { id: "upload" });
+      toast.loading("Mengunggah...", { id: "upload" });
       const res = await fetch("/api/storage/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      const newMedia = { type, url: data.url };
+      const newMedia = { type, url: data.url, name: file.name };
       setSlots(prev => prev.map(s => s.id === activeSlotId ? {
         ...s,
         localData: { ...s.localData, media: [...s.localData.media, newMedia] }
       } : s));
-      toast.success("Media terunggah", { id: "upload" });
+      toast.success(type === "document" ? "Dokumen terunggah" : "Media terunggah", { id: "upload" });
     } catch (err) {
       toast.error("Gagal unggah", { id: "upload" });
     }
@@ -251,24 +252,26 @@ function CompareContent() {
     fd.append("path", "compare");
     
     try {
-      toast.loading("Mengunggah media...", { id: "upload" });
+      toast.loading("Mengunggah...", { id: "upload" });
       const res = await fetch("/api/storage/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       
-      const newMedia = {
-        type: f.type.startsWith("video/") ? "video" : "image",
-        url: data.url,
-      };
+      let type: "image" | "video" | "document" = "document";
+      if (f.type.startsWith("video/")) type = "video";
+      else if (f.type.startsWith("image/")) type = "image";
+
+      const newMedia = { type, url: data.url, name: f.name };
 
       setSlots(prev => prev.map(s => s.id === activeSlotId ? {
         ...s,
         localData: { ...s.localData, media: [...s.localData.media, newMedia] }
       } : s));
-      toast.success("Media terunggah", { id: "upload" });
+      toast.success(type === "document" ? "Dokumen terunggah" : "Media terunggah", { id: "upload" });
     } catch (err) {
       toast.error("Gagal unggah", { id: "upload" });
     }
+    e.target.value = "";
   };
 
   const [publishing, setPublishing] = useState(false);
@@ -351,10 +354,11 @@ function CompareContent() {
   const handleDrop = async (e: React.DragEvent, slotId: string) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
-    if (file && (file.type.startsWith("image/") || file.type.startsWith("video/"))) {
-      setActiveSlotId(slotId);
-      await uploadMedia(file, file.type.startsWith("video/") ? "video" : "image");
-    }
+    if (!file) return;
+    setActiveSlotId(slotId);
+    if (file.type.startsWith("video/")) await uploadMedia(file, "video");
+    else if (file.type.startsWith("image/")) await uploadMedia(file, "image");
+    else await uploadMedia(file, "document");
   };
 
   const renderSlotUI = (slot: SlotData, index: number) => {
@@ -446,17 +450,46 @@ function CompareContent() {
         ) : (
           <Card className="overflow-hidden border-2 border-primary/5 shadow-lg p-3 space-y-3 relative">
              {slot.localData.media.length > 0 ? (
-               <div className="relative h-24 w-full rounded-xl overflow-hidden bg-black group shrink-0">
-                 {slot.localData.media[0].type === "video" ? (
-                    <video src={slot.localData.media[0].url} className="w-full h-full object-cover" />
-                 ) : (
-                    <img src={slot.localData.media[0].url} alt="" className="w-full h-full object-cover" />
-                 )}
-                 <button 
-                  onClick={() => updateSlot(slot.id, { localData: { ...slot.localData, media: [] } })}
-                  className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+               <div className="space-y-2">
+                 {slot.localData.media.map((m: any, mi: number) => (
+                   <div key={mi} className="relative group/media">
+                     {m.type === "image" && (
+                       <div className="relative h-24 w-full rounded-xl overflow-hidden bg-black">
+                         <img src={m.url} alt="" className="w-full h-full object-cover" />
+                         <button
+                           onClick={() => updateSlot(slot.id, { localData: { ...slot.localData, media: slot.localData.media.filter((_: any, idx: number) => idx !== mi) } })}
+                           className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full opacity-0 group-hover/media:opacity-100 transition-opacity"
+                         ><X className="w-2.5 h-2.5" /></button>
+                       </div>
+                     )}
+                     {m.type === "video" && (
+                       <div className="relative h-24 w-full rounded-xl overflow-hidden bg-black">
+                         <video src={m.url} className="w-full h-full object-cover" controls />
+                         <button
+                           onClick={() => updateSlot(slot.id, { localData: { ...slot.localData, media: slot.localData.media.filter((_: any, idx: number) => idx !== mi) } })}
+                           className="absolute top-1 right-1 p-0.5 bg-black/50 text-white rounded-full opacity-0 group-hover/media:opacity-100 transition-opacity"
+                         ><X className="w-2.5 h-2.5" /></button>
+                       </div>
+                     )}
+                     {m.type === "document" && (
+                       <div className="flex items-center gap-2 p-2 bg-blue-500/5 rounded-xl border border-blue-200/30 group-hover/media:bg-blue-500/10 transition-colors">
+                         <FileText className="w-5 h-5 text-blue-500 shrink-0" />
+                         <a href={m.url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium truncate text-blue-600 dark:text-blue-300 flex-1 hover:underline">
+                           {m.name || "Dokumen"}
+                         </a>
+                         <button
+                           onClick={() => updateSlot(slot.id, { localData: { ...slot.localData, media: slot.localData.media.filter((_: any, idx: number) => idx !== mi) } })}
+                           className="text-muted-foreground hover:text-destructive transition-colors"
+                         ><X className="w-3 h-3" /></button>
+                       </div>
+                     )}
+                   </div>
+                 ))}
+                 <button
+                   onClick={() => { setActiveSlotId(slot.id); fileRef.current?.click(); }}
+                   className="w-full h-8 rounded-xl border border-dashed border-primary/10 flex items-center justify-center gap-1 text-[9px] font-bold text-primary/40 hover:bg-primary/5 transition-colors"
                  >
-                   <X className="w-2.5 h-2.5" />
+                   <ImagePlus className="w-3 h-3" /> Tambah lagi
                  </button>
                </div>
              ) : (
@@ -465,7 +498,7 @@ function CompareContent() {
                 className="w-full h-24 rounded-xl border-2 border-dashed border-primary/10 bg-primary/5 flex flex-col items-center justify-center gap-1 hover:bg-primary/10 transition-colors shrink-0"
                >
                  <ImagePlus className="w-4 h-4 text-primary/40" />
-                 <span className="text-[7px] font-black text-primary/60 uppercase tracking-widest">Upload / Drop</span>
+                 <span className="text-[7px] font-black text-primary/60 uppercase tracking-widest">Gambar / Video / Dokumen</span>
                </button>
              )}
 
@@ -524,7 +557,7 @@ function CompareContent() {
 
   return (
     <div className="py-8 max-w-6xl mx-auto space-y-8 pb-32">
-      <input type="file" ref={fileRef} className="hidden" accept="image/*,video/*" onChange={handleUpload} />
+      <input type="file" ref={fileRef} className="hidden" accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={handleUpload} />
       
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">

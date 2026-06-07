@@ -1,22 +1,27 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveLoginAccount } from "@/lib/repair-user-account";
-import { verifyRecaptcha } from "@/lib/recaptcha";
+import { verifyDualCaptcha } from "@/lib/captcha";
 
 export const runtime = "nodejs";
 
 const schema = z.object({
   identifier: z.string().min(3),
   captchaToken: z.string().optional(),
+  turnstileToken: z.string().optional(),
 });
 
 export async function POST(req: Request) {
   try {
-    const { identifier, captchaToken } = schema.parse(await req.json());
+    const { identifier, captchaToken, turnstileToken } = schema.parse(await req.json());
 
-    const isHuman = await verifyRecaptcha(captchaToken);
-    if (!isHuman) {
-      return NextResponse.json({ error: "Verifikasi reCAPTCHA gagal." }, { status: 400 });
+    const captchaResult = await verifyDualCaptcha({
+      turnstileToken,
+      recaptchaToken: captchaToken,
+      remoteIp: req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || undefined,
+    });
+    if (!captchaResult.ok) {
+      return NextResponse.json({ error: captchaResult.error || "Verifikasi keamanan gagal." }, { status: 400 });
     }
 
     const account = await resolveLoginAccount(identifier);

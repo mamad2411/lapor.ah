@@ -40,7 +40,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import ReCAPTCHA from "react-google-recaptcha";
+import { DualCaptcha, useDualCaptcha } from "@/components/security/dual-captcha";
 import { logSecurityEvent } from "@/lib/audit-log";
 import {
   DocumentUpload,
@@ -374,7 +374,7 @@ export function RegisterForm({ token }: Props) {
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
 
-  const recaptchaRef = useRef<ReCAPTCHA>(null);
+  const { tokens: captchaTokens, isVerified: captchaVerified, handleChange: handleCaptchaChange, handleVerified: handleCaptchaVerified } = useDualCaptcha();
 
   const [loading, setLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
@@ -673,19 +673,15 @@ export function RegisterForm({ token }: Props) {
       setError("Verifikasi OTP email dan WhatsApp wajib diselesaikan");
       return;
     }
-    if (enable2FA && !totpVerified) {
-      // If user enabled 2FA switch but didn't verify it, 
-      // we'll proceed without 2FA to avoid blocking registration
-      // as requested: "kalo bagian ini tidak diverifikasi nanti otomatis dibaca sama sistem tidak dipakai"
-      // Note: We don't return error here anymore.
+
+    if (!captchaVerified && process.env.NODE_ENV === "production") {
+      setError("Silakan selesaikan verifikasi keamanan (Turnstile / reCAPTCHA).");
+      return;
     }
 
     setError("");
     setLoading(true);
     try {
-      const captchaToken = await recaptchaRef.current?.executeAsync();
-      recaptchaRef.current?.reset();
-
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -703,7 +699,8 @@ export function RegisterForm({ token }: Props) {
           profileImage,
           villageThumbnail,
           approvalDocument,
-          captchaToken,
+          captchaToken: captchaTokens.recaptchaToken,
+          turnstileToken: captchaTokens.turnstileToken,
           documentVerification: documentVerification
             ? {
                 valid: documentVerification.valid,
@@ -1442,10 +1439,9 @@ export function RegisterForm({ token }: Props) {
               </p>
             )}
 
-            <ReCAPTCHA
-              ref={recaptchaRef}
-              size="invisible"
-              sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+            <DualCaptcha
+              onVerified={handleCaptchaVerified}
+              onChange={handleCaptchaChange}
             />
 
             <div className="flex gap-3">

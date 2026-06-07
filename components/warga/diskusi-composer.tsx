@@ -17,6 +17,9 @@ import {
   ArrowLeftRight,
   Vote,
   Smile,
+  FileText,
+  File,
+  ListChecks,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -33,11 +36,13 @@ import {
 import { toast } from "sonner";
 import type { VillageOption, StickerItem } from "@/lib/warga/types";
 import { cn } from "@/lib/utils";
+import { parseJsonResponse } from "@/lib/safe-json";
 import { StickerPicker } from "./sticker-picker";
 
 interface EditingMedia {
-  type: "image" | "video" | "voice";
+  type: "image" | "video" | "voice" | "document";
   url: string;
+  name?: string;
 }
 
 function getCaretCoordinates(element: HTMLTextAreaElement, position: number) {
@@ -138,7 +143,10 @@ export function DiskusiComposer() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch("/api/villages/list").then((r) => r.json()).then((d) => setVillages(d.villages || []));
+    fetch("/api/villages/list")
+      .then((r) => parseJsonResponse<{ villages?: VillageOption[] }>(r))
+      .then((d) => setVillages(d.villages || []))
+      .catch(() => setVillages([]));
   }, []);
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -195,7 +203,7 @@ export function DiskusiComposer() {
       recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
       recorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: "audio/ogg; codecs=opus" });
-        const file = new File([blob], `vn_${Date.now()}.ogg`, { type: "audio/ogg" });
+        const file = new (File as any)([blob], `vn_${Date.now()}.ogg`, { type: "audio/ogg" });
         await uploadMedia(file, "voice");
         stream.getTracks().forEach(track => track.stop());
       };
@@ -215,24 +223,27 @@ export function DiskusiComposer() {
     clearInterval(timerRef.current);
   };
 
-  async function uploadMedia(file: File, type: "image" | "video" | "voice") {
+  async function uploadMedia(file: File, type: "image" | "video" | "voice" | "document") {
+    const maxMb = process.env.NODE_ENV === "development" ? 50 : 20;
+    if (file.size > maxMb * 1024 * 1024) {
+      toast.error(`File maksimal ${maxMb} MB.`);
+      return;
+    }
+
     const fd = new FormData();
     fd.append("file", file);
     fd.append("path", "diskusi");
     try {
       const res = await fetch("/api/storage/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      
-      const newMedia: EditingMedia = { 
-        type, 
-        url: data.url, 
-      };
+      const data = await parseJsonResponse<{ url?: string; error?: string }>(res);
+      if (!res.ok) throw new Error(data.error || "Upload gagal");
 
-      setMedia((prev) => [...prev, newMedia]);
-      toast.success(type === "voice" ? "Voice Note tersimpan" : "Media terunggah");
+      if (!data.url) throw new Error("URL media tidak diterima dari server");
+
+      setMedia((prev) => [...prev, { type, url: data.url!, name: file.name }]);
+      toast.success(type === "voice" ? "Voice note terlampir" : type === "document" ? "Dokumen terlampir" : "Media terlampir");
     } catch (err) {
-      toast.error("Gagal unggah media: " + (err instanceof Error ? err.message : "Error tidak dikenal"));
+      toast.error(err instanceof Error ? err.message : "Gagal unggah media");
     }
   }
 
@@ -286,7 +297,7 @@ export function DiskusiComposer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse<{ error?: string }>(res);
       if (!res.ok) throw new Error(data.error);
       
       toast.success("Postingan berhasil dikirim!");
@@ -316,10 +327,14 @@ export function DiskusiComposer() {
                 ref={fileRef}
                 type="file"
                 className="hidden"
-                accept="image/*,video/*"
+                accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) uploadMedia(f, f.type.startsWith("video/") ? "video" : "image");
+                  if (!f) return;
+                  if (f.type.startsWith("video/")) uploadMedia(f, "video");
+                  else if (f.type.startsWith("image/")) uploadMedia(f, "image");
+                  else uploadMedia(f, "document");
+                  e.target.value = "";
                 }}
               />
               <Button
@@ -330,6 +345,16 @@ export function DiskusiComposer() {
                 onClick={() => fileRef.current?.click()}
               >
                 <ImagePlus className="w-4 h-4" /> Media
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-full gap-2 border-primary/20 text-muted-foreground hover:bg-primary/5 h-10 px-4"
+                onClick={() => fileRef.current?.click()}
+                title="Upload dokumen PDF/Word"
+              >
+                <FileText className="w-4 h-4" /> Dokumen
               </Button>
               <Button
                 type="button"
@@ -345,42 +370,42 @@ export function DiskusiComposer() {
           </div>
 
           <div className="p-6 space-y-6">
-            {/* Media Preview Grid - Photos/Videos/VN ABOVE text with smaller size */}
             {media.length > 0 && (
-              <div className="flex flex-wrap gap-4">
+              <div className="grid grid-cols-2 gap-2">
                 {media.map((m, i) => (
-                  <div key={i} className="flex flex-col gap-1 items-start">
-                    <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-primary/10 group bg-black shadow-sm shrink-0">
-                      {m.type === "video" ? (
-                        <video src={m.url} className="w-full h-full object-cover" />
-                      ) : m.type === "voice" ? (
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-primary/5 text-primary">
-                          <AudioLines className="w-5 h-5 mb-0.5 animate-pulse" />
-                          <span className="text-[7px] font-black uppercase tracking-widest">VN</span>
-                        </div>
-                      ) : (
-                        <img src={m.url} alt="" className="w-full h-full object-cover" />
-                      )}
-                      
-                      <button
-                        onClick={() => setMedia(media.filter((_, idx) => idx !== i))}
-                        className="absolute top-0.5 right-0.5 p-0.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                      >
-                        <X className="w-2.5 h-2.5" />
-                      </button>
-                    </div>
+                  <div key={i} className="relative group rounded-2xl overflow-hidden border border-border/60 bg-muted/30">
                     {m.type === "image" && (
-                      <Input
-                        placeholder="Nama/URL Backsound..."
-                        value={m.bgMusic || ""}
-                        onChange={(e) => {
-                          const nextMedia = [...media];
-                          nextMedia[i] = { ...nextMedia[i], bgMusic: e.target.value };
-                          setMedia(nextMedia);
-                        }}
-                        className="w-20 h-6 text-[8px] px-1 bg-background border-primary/25 rounded-md focus-visible:ring-1"
-                      />
+                      <div className="aspect-video">
+                        <img src={m.url} alt="" className="w-full h-full object-cover" />
+                      </div>
                     )}
+                    {m.type === "video" && (
+                      <div className="aspect-video bg-black">
+                        <video src={m.url} className="w-full h-full object-cover" controls />
+                      </div>
+                    )}
+                    {m.type === "voice" && (
+                      <div className="flex items-center gap-3 p-3 bg-primary/5">
+                        <AudioLines className="w-6 h-6 text-primary shrink-0 animate-pulse" />
+                        <span className="text-xs font-semibold text-primary">Voice Note</span>
+                      </div>
+                    )}
+                    {m.type === "document" && (
+                      <div className="flex items-center gap-3 p-3 bg-blue-500/5">
+                        <FileText className="w-6 h-6 text-blue-500 shrink-0" />
+                        <span className="text-xs font-medium truncate text-blue-700 dark:text-blue-300">
+                          {m.name || "Dokumen"}
+                        </span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setMedia(media.filter((_, idx) => idx !== i))}
+                      className="absolute top-1.5 right-1.5 p-1 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label="Hapus"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
                   </div>
                 ))}
               </div>

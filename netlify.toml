@@ -1,6 +1,6 @@
+# Netlify + Next.js — jangan set publish manual, plugin yang atur output
 [build]
   command = "npm run build"
-  publish = ".next"
 
 [build.environment]
   NODE_VERSION = "20"
@@ -8,3 +8,6 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+[functions]
+  node_bundler = "esbuild"

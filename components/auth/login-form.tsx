@@ -80,7 +80,7 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import ReCAPTCHA from "react-google-recaptcha";
+import { DualCaptcha, type DualCaptchaTokens } from "@/components/security/dual-captcha";
 import { getAuthClient } from "@/lib/firebase/client";
 import { buildAdminPanelPath } from "@/lib/admin/build-admin-url";
 
@@ -193,7 +193,7 @@ export function LoginForm() {
   const [attempts, setAttempts] = useState(0);
   const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
 
-  const recaptchaRef = useRef<ReCAPTCHA>(null);
+  const [captchaTokens, setCaptchaTokens] = useState<DualCaptchaTokens | null>(null);
 
   function maskEmail(email: string) {
     const [local, domain] = email.split("@");
@@ -230,18 +230,31 @@ export function LoginForm() {
   async function handleCredentials(e: React.FormEvent) {
     e.preventDefault();
     if (isBlocked()) return;
+
+    // Cek apakah CAPTCHA sudah diisi jika key tersedia
+    const hasTS = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    const hasRC = !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    
+    if (process.env.NODE_ENV === "production") {
+      if (hasTS && !captchaTokens?.turnstileToken) {
+        setError("Silakan selesaikan verifikasi Cloudflare.");
+        return;
+      }
+      if (hasRC && !captchaTokens?.recaptchaToken) {
+        setError("Silakan selesaikan verifikasi reCAPTCHA.");
+        return;
+      }
+    }
+
     setError("");
     setLoading(true);
     try {
-      const captchaToken = await recaptchaRef.current?.executeAsync();
-      recaptchaRef.current?.reset();
-
       const resolveRes = await fetch("/api/auth/resolve-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           identifier: identifier.trim(),
-          captchaToken
+          ...captchaTokens
         }),
       });
       const userData = await resolveRes.json();
@@ -508,10 +521,9 @@ export function LoginForm() {
               </p>
             )}
 
-            <ReCAPTCHA
-              ref={recaptchaRef}
-              size="invisible"
-              sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+            <DualCaptcha 
+              onChange={setCaptchaTokens}
+              className="py-2"
             />
 
             <Button type="submit" className="w-full rounded-full" disabled={loading || blocked}>

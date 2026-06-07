@@ -873,17 +873,18 @@ export function DiskusiPostCard({ post, onTagClick, variant = "feed" }: DiskusiP
         <div 
           className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 sm:p-10 animate-in fade-in duration-200"
           onClick={() => setPreviewMedia(null)}
+          onKeyDown={(e) => e.key === "Escape" && setPreviewMedia(null)}
+          tabIndex={-1}
         >
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-4 right-4 text-white hover:bg-white/10 rounded-full h-12 w-12"
-            onClick={() => setPreviewMedia(null)}
-          >
-            <X className="w-8 h-8" />
-          </Button>
-          
           <div className="relative max-w-5xl w-full max-h-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPreviewMedia(null)}
+              className="absolute -top-3 -right-3 z-10 flex items-center justify-center w-9 h-9 rounded-full bg-black/70 text-white hover:bg-black border border-white/20 shadow-lg"
+              aria-label="Tutup preview"
+            >
+              <X className="w-5 h-5" />
+            </button>
             {previewMedia.type === "video" ? (
               <video 
                 src={previewMedia.url} 
