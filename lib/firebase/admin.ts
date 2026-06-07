@@ -15,7 +15,12 @@ export function getAdminApp() {
     .trim();
 
   if (getApps().length > 0) {
-    return getApps()[0];
+    const existingApp = getApps()[0];
+    // Pastikan storageBucket terpasang jika belum ada
+    if (!existingApp.options.storageBucket && storageBucket) {
+      existingApp.options.storageBucket = storageBucket;
+    }
+    return existingApp;
   }
 
   if (!projectId || !clientEmail || !privateKey) {

@@ -6,7 +6,17 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const formData = await req.formData();
+    let formData;
+    try {
+      formData = await req.formData();
+    } catch (e) {
+      console.error("[storage/upload] Failed to parse formData:", e);
+      return NextResponse.json(
+        { error: "Gagal membaca data form. Pastikan ukuran file tidak melebihi batas (Netlify: 6MB)." },
+        { status: 400 }
+      );
+    }
+
     const file = formData.get("file") as File;
     const uploadPath = (formData.get("path") as string) || "uploads";
 
@@ -40,10 +50,22 @@ export async function POST(req: Request) {
     const bucket = storage.bucket();
 
     if (!bucket.name) {
-      return NextResponse.json(
-        { error: "Firebase Storage Bucket belum dikonfigurasi di environment variabel." },
-        { status: 500 }
-      );
+      // Fallback: coba ambil bucket name dari environment jika bucket default kosong
+      const envBucket = (process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "")
+        .replace("gs://", "").replace(/\/$/, "").trim();
+      
+      if (!envBucket) {
+        return NextResponse.json(
+          { error: "Firebase Storage Bucket belum dikonfigurasi di environment variabel." },
+          { status: 500 }
+        );
+      }
+      
+      const manualBucket = storage.bucket(envBucket);
+      const fileRef = manualBucket.file(storagePath);
+      await fileRef.save(buffer, { metadata: { contentType: file.type } });
+      const url = await getDownloadURL(fileRef);
+      return NextResponse.json({ url });
     }
 
     const fileRef = bucket.file(storagePath);
@@ -52,7 +74,15 @@ export async function POST(req: Request) {
       metadata: { contentType: file.type },
     });
 
-    const url = await getDownloadURL(fileRef);
+    let url;
+    try {
+      url = await getDownloadURL(fileRef);
+    } catch (urlErr) {
+      console.warn("[storage/upload] getDownloadURL failed, trying fallback publicUrl");
+      // Fallback: jika getDownloadURL gagal, coba jadikan publik
+      await fileRef.makePublic();
+      url = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+    }
 
     return NextResponse.json({ url });
   } catch (err: any) {
