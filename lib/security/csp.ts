@@ -35,7 +35,6 @@ export function buildCsp(nonce: string): string {
 
     "script-src": [
       "'self'",
-      `'nonce-${nonce}'`,
       // Next.js hydration & third-party compatibility
       "'unsafe-inline'",
       "'unsafe-eval'",
