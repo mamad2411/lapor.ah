@@ -24,7 +24,7 @@ import {
   isHighThreat,
   makeRateLimitKey,
   rateLimitHeaders,
-} from "@/lib/security/cloudflare";
+} from "@/lib/security/request-utils";
 import {
   checkRateLimit,
   LIMIT_OTP_SEND,

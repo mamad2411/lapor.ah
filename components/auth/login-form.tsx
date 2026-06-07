@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Component, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -80,7 +80,7 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DualCaptcha, type DualCaptchaTokens } from "@/components/security/dual-captcha";
+import ReCAPTCHA from "react-google-recaptcha";
 import { getAuthClient } from "@/lib/firebase/client";
 import { buildAdminPanelPath } from "@/lib/admin/build-admin-url";
 
@@ -169,6 +169,34 @@ type PendingUser = {
   adminUrl?: string;
 };
 
+class SafeCaptchaBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("[SafeCaptchaBoundary] Caught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="text-xs text-destructive bg-destructive/5 border border-destructive/25 rounded-2xl p-4 text-center leading-relaxed">
+          <strong>Captcha gagal dimuat.</strong><br />
+          Ini disebabkan oleh konflik dengan ekstensi browser Anda (seperti <strong>Trust Wallet</strong> atau Captcha Solver).
+          Silakan nonaktifkan ekstensi tersebut atau gunakan <strong>Mode Incognito</strong> untuk masuk.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -193,7 +221,8 @@ export function LoginForm() {
   const [attempts, setAttempts] = useState(0);
   const [blockedUntil, setBlockedUntil] = useState<number | null>(null);
 
-  const [captchaTokens, setCaptchaTokens] = useState<DualCaptchaTokens | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
 
   function maskEmail(email: string) {
     const [local, domain] = email.split("@");
@@ -231,19 +260,9 @@ export function LoginForm() {
     e.preventDefault();
     if (isBlocked()) return;
 
-    // Cek apakah CAPTCHA sudah diisi jika key tersedia
-    const hasTS = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
-    const hasRC = !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
-    
-    if (process.env.NODE_ENV === "production") {
-      if (hasTS && !captchaTokens?.turnstileToken) {
-        setError("Silakan selesaikan verifikasi Cloudflare.");
-        return;
-      }
-      if (hasRC && !captchaTokens?.recaptchaToken) {
-        setError("Silakan selesaikan verifikasi reCAPTCHA.");
-        return;
-      }
+    if (!captchaToken && process.env.NODE_ENV === "production") {
+      setError("Silakan selesaikan verifikasi reCAPTCHA.");
+      return;
     }
 
     setError("");
@@ -254,7 +273,7 @@ export function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           identifier: identifier.trim(),
-          ...captchaTokens
+          captchaToken
         }),
       });
       const userData = await resolveRes.json();
@@ -521,10 +540,15 @@ export function LoginForm() {
               </p>
             )}
 
-            <DualCaptcha 
-              onChange={setCaptchaTokens}
-              className="py-2"
-            />
+            <SafeCaptchaBoundary>
+              <ReCAPTCHA
+                ref={recaptchaRef}
+                size="normal"
+                sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+                onChange={(token) => setCaptchaToken(token)}
+                className="flex justify-center"
+              />
+            </SafeCaptchaBoundary>
 
             <Button type="submit" className="w-full rounded-full" disabled={loading || blocked}>
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Lanjut"}

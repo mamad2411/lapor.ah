@@ -43,8 +43,6 @@ export function buildCsp(nonce: string): string {
       // Google reCAPTCHA
       "https://www.google.com",
       "https://www.gstatic.com",
-      // Cloudflare Turnstile
-      "https://challenges.cloudflare.com",
       // Firebase (Auth SDK membutuhkan ini)
       "https://apis.google.com",
     ],
@@ -89,8 +87,6 @@ export function buildCsp(nonce: string): string {
       "https://storage.googleapis.com",
       // reCAPTCHA verify
       "https://www.google.com",
-      // Cloudflare Turnstile
-      "https://challenges.cloudflare.com",
       // Vercel Analytics
       "https://vitals.vercel-insights.com",
       ...(isProd ? [] : ["ws://localhost:*", "http://localhost:*"]),
@@ -100,8 +96,6 @@ export function buildCsp(nonce: string): string {
       // Google reCAPTCHA iframe
       "https://www.google.com",
       "https://recaptcha.google.com",
-      // Cloudflare Turnstile
-      "https://challenges.cloudflare.com",
     ],
 
     "frame-ancestors": ["'none'"],

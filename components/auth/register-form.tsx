@@ -40,7 +40,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
-import { DualCaptcha, useDualCaptcha } from "@/components/security/dual-captcha";
+import ReCAPTCHA from "react-google-recaptcha";
 import { logSecurityEvent } from "@/lib/audit-log";
 import {
   DocumentUpload,
@@ -374,7 +374,8 @@ export function RegisterForm({ token }: Props) {
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
 
-  const { tokens: captchaTokens, isVerified: captchaVerified, handleChange: handleCaptchaChange, handleVerified: handleCaptchaVerified } = useDualCaptcha();
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
 
   const [loading, setLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
@@ -674,8 +675,8 @@ export function RegisterForm({ token }: Props) {
       return;
     }
 
-    if (!captchaVerified && process.env.NODE_ENV === "production") {
-      setError("Silakan selesaikan verifikasi keamanan (Turnstile / reCAPTCHA).");
+    if (!captchaToken && process.env.NODE_ENV === "production") {
+      setError("Silakan selesaikan verifikasi reCAPTCHA.");
       return;
     }
 
@@ -699,8 +700,7 @@ export function RegisterForm({ token }: Props) {
           profileImage,
           villageThumbnail,
           approvalDocument,
-          captchaToken: captchaTokens.recaptchaToken,
-          turnstileToken: captchaTokens.turnstileToken,
+          captchaToken,
           documentVerification: documentVerification
             ? {
                 valid: documentVerification.valid,
@@ -1439,9 +1439,12 @@ export function RegisterForm({ token }: Props) {
               </p>
             )}
 
-            <DualCaptcha
-              onVerified={handleCaptchaVerified}
-              onChange={handleCaptchaChange}
+            <ReCAPTCHA
+              ref={recaptchaRef}
+              size="normal"
+              sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+              onChange={(token) => setCaptchaToken(token)}
+              className="flex justify-center mb-4"
             />
 
             <div className="flex gap-3">
