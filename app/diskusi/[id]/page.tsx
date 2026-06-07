@@ -21,12 +21,27 @@ export default function DiskusiThreadPage() {
 
   useEffect(() => {
     fetch(`/api/diskusi/posts/${id}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) {
+          return r.text().then(text => {
+            let errMsg = "Gagal memuat posting";
+            try {
+              const parsed = JSON.parse(text);
+              errMsg = parsed.error || errMsg;
+            } catch {}
+            throw new Error(errMsg);
+          });
+        }
+        return r.json();
+      })
       .then((d) => {
         if (d.post) {
           setPost(d.post);
           setReplyCount(d.post.replyCount);
         }
+      })
+      .catch((err) => {
+        console.error("Gagal memuat thread:", err);
       })
       .finally(() => setLoading(false));
   }, [id]);

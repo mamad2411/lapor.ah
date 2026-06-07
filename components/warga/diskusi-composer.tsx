@@ -148,9 +148,9 @@ export function DiskusiComposer() {
     const textBefore = val.slice(0, cursor);
 
     // Mention detection — support nama multi-kata (e.g. @desa satrio)
-    const mentionMatch = textBefore.match(/@([\w ]*)$/);
+    const mentionMatch = textBefore.match(/@([\w]+(?: [\w]+)*)?$/);
     if (mentionMatch) {
-      const q = mentionMatch[1].toLowerCase().trim();
+      const q = (mentionMatch[1] || "").toLowerCase().trim();
       setMentionQuery(q);
       setHashtagQuery(null);
       setMentionList(villages.filter(v => v.villageName.toLowerCase().includes(q) || v.adminName.toLowerCase().includes(q)).slice(0, 6));
@@ -266,6 +266,7 @@ export function DiskusiComposer() {
         taggedAdmins,
         villageName: taggedVillage?.villageName || "",
         villageId: taggedVillage?.id || undefined,
+        authorRole: "warga",
         media: media,
         stickers: selectedStickers.map(s => ({ id: s.id, url: s.url })),
       };
@@ -398,7 +399,7 @@ export function DiskusiComposer() {
                 />
                 
                 {/* Unified Dropdown for @ and # */}
-                {(mentionQuery !== null || hashtagQuery !== null) && (
+                {((mentionQuery !== null && mentionList.length > 0) || (hashtagQuery !== null && hashtagList.length > 0)) && (
                   <div 
                     style={{ top: `${dropdownCoords.top}px`, left: `${dropdownCoords.left}px` }}
                     className="absolute z-50 w-64 rounded-2xl border bg-popover shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 transition-all duration-75"

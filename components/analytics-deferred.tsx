@@ -8,5 +8,8 @@ const Analytics = dynamic(
 );
 
 export function AnalyticsDeferred() {
+  if (process.env.NODE_ENV === "development") {
+    return null;
+  }
   return <Analytics />;
 }

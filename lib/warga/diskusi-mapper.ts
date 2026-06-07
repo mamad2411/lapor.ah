@@ -26,6 +26,7 @@ export function mapDiskusiPost(
   return {
     id: doc.id,
     authorAlias: d.authorAlias,
+    authorRole: d.authorRole || "warga",
     content: d.content,
     hashtags: d.hashtags || [],
     taggedAdmins: d.taggedAdmins || [],

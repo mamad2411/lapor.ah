@@ -115,6 +115,7 @@ const pollSchema = z.object({
   taggedAdmins: z.array(z.string()).optional().default([]),
   villageName: z.string().optional().default(""),
   villageId: z.string().optional(),
+  authorRole: z.enum(["admin", "warga"]).optional(),
   media: z
     .array(
       z.object({
@@ -182,9 +183,15 @@ export async function POST(req: Request) {
         }
       : null;
 
+    const authorRole = body.authorRole || "warga";
+    const authorAlias = authorRole === "admin" && body.villageName
+      ? `Desa ${body.villageName}`
+      : generateAnonymousAlias();
+
     const docRef = adminDb().collection("diskusi_posts").doc();
     await docRef.set({
-      authorAlias: generateAnonymousAlias(),
+      authorAlias,
+      authorRole,
       content: body.content,
       hashtags,
       taggedAdmins,

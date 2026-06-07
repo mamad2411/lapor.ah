@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import dynamic from "next/dynamic";
 import { WargaShell } from "@/components/warga/warga-shell";
-import { DiskusiFeed } from "@/components/warga/diskusi-feed";
+
+const DiskusiFeed = dynamic(
+  () => import("@/components/warga/diskusi-feed").then((m) => m.DiskusiFeed),
+  { ssr: false }
+);
 
 function DiskusiContent() {
   const searchParams = useSearchParams();

@@ -196,6 +196,7 @@ export default function AdminProfilePage() {
         taggedAdmins: [profile?.villageName], // Tag themselves automatically
         villageName: profile?.villageName,
         villageId: profile?.uid,
+        authorRole: "admin",
         media: media.map((m) => ({
           type: m.type,
           url: m.url,

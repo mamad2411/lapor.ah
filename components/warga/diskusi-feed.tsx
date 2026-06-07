@@ -376,7 +376,7 @@ export function DiskusiFeed({ initialTag }: { initialTag?: string }) {
                 <SelectValue placeholder="Urutkan" />
               </SelectTrigger>
               <SelectContent className="rounded-xl">
-                <SelectItem value="foryou">Untuk Anda (Algoritma)</SelectItem>
+                <SelectItem value="foryou">Untuk Anda</SelectItem>
                 <SelectItem value="new">Terbaru</SelectItem>
                 <SelectItem value="replies">Paling Ramai</SelectItem>
                 <SelectItem value="poll">Polling Aktif</SelectItem>

@@ -276,7 +276,19 @@ export function DiskusiPostCard({ post, onTagClick, variant = "feed" }: DiskusiP
       if (slot.type === "post" && slot.postId && !fetchedIdsRef.current.has(slot.postId)) {
         fetchedIdsRef.current.add(slot.postId);
         fetch(`/api/diskusi/posts/${slot.postId}`)
-          .then(res => res.json())
+          .then(res => {
+            if (!res.ok) {
+              return res.text().then(text => {
+                let errMsg = "Gagal memuat post pembanding";
+                try {
+                  const parsed = JSON.parse(text);
+                  errMsg = parsed.error || errMsg;
+                } catch {}
+                throw new Error(errMsg);
+              });
+            }
+            return res.json();
+          })
           .then(resData => {
             if (resData?.post) {
               setFetchedPosts(prev => ({ ...prev, [slot.postId!]: resData.post }));

@@ -54,6 +54,7 @@ interface SlotData {
   mode: "id" | "local";
   postId: string;
   postData: any;
+  status?: "idle" | "loading" | "success" | "error";
   localData: { 
     content: string; 
     media: any[];
@@ -68,8 +69,8 @@ function CompareContent() {
   const searchParams = useSearchParams();
   
   const [slots, setSlots] = useState<SlotData[]>([
-    { id: "1", mode: "id", postId: searchParams.get("a") || "", postData: null, localData: { content: "", media: [] } },
-    { id: "2", mode: "id", postId: searchParams.get("b") || "", postData: null, localData: { content: "", media: [] } }
+    { id: "1", mode: "id", postId: searchParams.get("a") || "", postData: null, status: "idle", localData: { content: "", media: [] } },
+    { id: "2", mode: "id", postId: searchParams.get("b") || "", postData: null, status: "idle", localData: { content: "", media: [] } }
   ]);
 
   // Global Interaction States
@@ -111,6 +112,7 @@ function CompareContent() {
       mode: "id", 
       postId: "", 
       postData: null, 
+      status: "idle",
       localData: { content: "", media: [], stickerId: undefined, stickerUrl: undefined } 
     }]);
   };
@@ -125,21 +127,29 @@ function CompareContent() {
   };
 
   const fetchPost = async (id: string, slotId: string) => {
-    if (!id) return;
+    updateSlot(slotId, { status: "loading" });
     try {
       const res = await fetch(`/api/diskusi/posts/${id}`);
+      if (!res.ok) {
+        const text = await res.text();
+        let errMsg = "Gagal memuat posting";
+        try {
+          const parsed = JSON.parse(text);
+          errMsg = parsed.error || errMsg;
+        } catch {}
+        throw new Error(errMsg);
+      }
       const data = await res.json();
-      if (res.ok) updateSlot(slotId, { postData: data.post });
-      else updateSlot(slotId, { postData: null });
+      updateSlot(slotId, { postData: data.post, status: "success" });
     } catch (err) {
       console.error(err);
-      updateSlot(slotId, { postData: null });
+      updateSlot(slotId, { postData: null, status: "error" });
     }
   };
 
   useEffect(() => {
     slots.forEach(s => {
-      if (s.mode === "id" && s.postId && !s.postData) {
+      if (s.mode === "id" && s.postId && s.postId.length > 5 && s.status === "idle") {
         fetchPost(s.postId, s.id);
       }
     });
@@ -151,9 +161,9 @@ function CompareContent() {
     const cursor = e.target.selectionStart;
     const textBefore = val.slice(0, cursor);
 
-    const mentionMatch = textBefore.match(/@(\w*)$/);
+    const mentionMatch = textBefore.match(/@([\w]+(?: [\w]+)*)?$/);
     if (mentionMatch) {
-      const q = mentionMatch[1].toLowerCase();
+      const q = (mentionMatch[1] || "").toLowerCase().trim();
       setMentionQuery(q);
       setHashtagQuery(null);
       setMentionList(villages.filter(v => v.villageName.toLowerCase().includes(q) || v.adminName.toLowerCase().includes(q)).slice(0, 6));
@@ -176,7 +186,7 @@ function CompareContent() {
     const cursor = textareaRef.current?.selectionStart ?? globalContent.length;
     const textBefore = globalContent.slice(0, cursor);
     const textAfter = globalContent.slice(cursor);
-    const regex = new RegExp(`${prefix}(\\w*)$`);
+    const regex = prefix === "@" ? /@[\w ]*$/ : new RegExp(`${prefix}\\w*$`);
     const replaced = textBefore.replace(regex, `${prefix}${value} `);
     setGlobalContent(replaced + textAfter);
     setMentionQuery(null);
@@ -309,6 +319,7 @@ function CompareContent() {
         content: fullContent,
         hashtags: hashtags.length ? hashtags : ["analisis_komparatif"],
         taggedAdmins,
+        authorRole: "warga",
         media,
         stickers: selectedStickers.map(s => ({ id: s.id, url: s.url })),
       };
@@ -389,8 +400,11 @@ function CompareContent() {
                 placeholder="Post ID..." 
                 value={slot.postId} 
                 onChange={(e) => {
-                  updateSlot(slot.id, { postId: e.target.value, postData: null });
-                  if (e.target.value.length > 5) fetchPost(e.target.value, slot.id);
+                  updateSlot(slot.id, { 
+                    postId: e.target.value, 
+                    postData: null, 
+                    status: "idle" 
+                  });
                 }} 
                 className="rounded-xl bg-muted/20 border-none h-9 text-[10px] pl-9" 
               />
@@ -412,6 +426,16 @@ function CompareContent() {
                   <p className="text-[10px] leading-relaxed line-clamp-3 opacity-80">{slot.postData.content}</p>
                 </CardContent>
               </Card>
+            ) : slot.status === "loading" ? (
+              <div className="aspect-square rounded-2xl border-2 border-dashed border-muted flex flex-col items-center justify-center text-muted-foreground p-6 text-center space-y-2">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                <p className="text-[9px] font-medium">Memuat postingan...</p>
+              </div>
+            ) : slot.status === "error" && slot.postId ? (
+              <div className="aspect-square rounded-2xl border-2 border-dashed border-destructive/20 bg-destructive/5 flex flex-col items-center justify-center text-destructive p-6 text-center space-y-1">
+                <X className="w-5 h-5 opacity-60" />
+                <p className="text-[9px] font-bold">Post tidak ditemukan</p>
+              </div>
             ) : (
               <div className="aspect-square rounded-2xl border-2 border-dashed border-muted flex flex-col items-center justify-center text-muted-foreground p-6 text-center space-y-1">
                 <Search className="w-5 h-5 opacity-20" />
@@ -578,7 +602,7 @@ function CompareContent() {
               )}
 
               {/* Autocomplete Dropdown */}
-              {(mentionQuery !== null || hashtagQuery !== null) && (
+              {((mentionQuery !== null && mentionList.length > 0) || (hashtagQuery !== null && hashtagList.length > 0)) && (
                 <div className="absolute z-50 left-0 bottom-full mb-2 w-64 rounded-2xl border bg-popover shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2">
                   <div className="p-1.5">
                     {mentionQuery !== null && mentionList.map((v: any) => (

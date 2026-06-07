@@ -22,6 +22,17 @@ export default function PublicVillageProfilePage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingPosts, setLoadingPosts] = useState(true);
+  const [activeTab, setActiveTab] = useState<"resmi" | "tag">("resmi");
+
+  const officialPosts = useMemo(() => {
+    return posts.filter((p) => p.authorRole === "admin");
+  }, [posts]);
+
+  const taggedPosts = useMemo(() => {
+    return posts.filter((p) => p.authorRole !== "admin");
+  }, [posts]);
+
+  const activePosts = activeTab === "resmi" ? officialPosts : taggedPosts;
 
   useEffect(() => {
     if (!id) return;
@@ -225,20 +236,46 @@ export default function PublicVillageProfilePage() {
             <div className="md:col-span-6 space-y-4">
               <div className="flex items-center gap-1.5 pb-2 border-b">
                 <MessageSquare className="w-4 h-4 text-primary" />
-                <span className="text-xs font-bold uppercase tracking-wider text-foreground">Postingan Resmi Desa ({posts.length})</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-foreground">Diskusi & Postingan Desa</span>
+              </div>
+
+              {/* Premium Tabs */}
+              <div className="flex p-1 bg-muted/40 rounded-xl gap-1 border border-primary/5">
+                <button
+                  onClick={() => setActiveTab("resmi")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all ${
+                    activeTab === "resmi"
+                      ? "bg-background text-primary shadow-sm border border-primary/5"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  }`}
+                >
+                  Resmi ({officialPosts.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab("tag")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all ${
+                    activeTab === "tag"
+                      ? "bg-background text-primary shadow-sm border border-primary/5"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  }`}
+                >
+                  Tag Warga ({taggedPosts.length})
+                </button>
               </div>
 
               {loadingPosts ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-6 h-6 animate-spin text-primary/40" />
                 </div>
-              ) : posts.length === 0 ? (
-                <div className="text-center py-16 bg-muted/5 rounded-2xl border-2 border-dashed text-xs text-muted-foreground">
-                  Belum ada postingan dari instansi Desa ini.
+              ) : activePosts.length === 0 ? (
+                <div className="text-center py-16 bg-muted/5 rounded-2xl border-2 border-dashed text-[11px] text-muted-foreground">
+                  {activeTab === "resmi"
+                    ? "Belum ada postingan resmi dari instansi Desa ini."
+                    : "Belum ada postingan warga yang menandai (tag) Desa ini."}
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {posts.map((post) => (
+                  {activePosts.map((post) => (
                     <DiskusiPostCard
                       key={post.id}
                       post={post}
