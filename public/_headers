@@ -23,10 +23,10 @@
   # Batasi fitur browser berbahaya
   Permissions-Policy: camera=(), microphone=(), geolocation=(self), payment=(), usb=(), bluetooth=(), interest-cohort=()
 
-  # Isolasi cross-origin (hardening SharedArrayBuffer & Spectre)
-  Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Embedder-Policy: require-corp
-  Cross-Origin-Resource-Policy: same-origin
+  # Isolasi cross-origin (relaxed for Leaflet & Firebase)
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Cross-Origin-Embedder-Policy: unsafe-none
+  Cross-Origin-Resource-Policy: cross-origin
 
   # Cegah DNS prefetch
   X-DNS-Prefetch-Control: off

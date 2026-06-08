@@ -84,8 +84,11 @@ export async function POST(req: Request) {
     }
 
     const file = formData.get("file");
-    let uploadPath = ((formData.get("path") as string) || "uploads").replace(/[^a-zA-Z0-9/_-]/g, "");
-    if (!uploadPath) uploadPath = "uploads";
+    let rawPath = ((formData.get("path") as string) || "misc").replace(/[^a-zA-Z0-9/_-]/g, "");
+    if (!rawPath) rawPath = "misc";
+    
+    // Selalu simpan di dalam folder 'uploads' untuk menghindari collision dengan route app (seperti /laporan)
+    const uploadPath = `uploads/${rawPath}`.replace(/\/+/g, "/");
 
     // Validasi tambahan untuk diskusi dan profile desa (tidak boleh ada audio/backsound di video)
     const isDiscussionOrProfile = uploadPath.includes("diskusi") || uploadPath.includes("desa") || uploadPath.includes("profile");
@@ -140,7 +143,7 @@ export async function POST(req: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const safeName = `${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.]/g, "-")}`;
-    const storagePath = `${uploadPath}/${safeName}`;
+    const storagePath = `${uploadPath}/${safeName}`.replace(/\/+/g, "/");
 
     const bucketName = resolveBucketName();
     let url: string;
@@ -150,20 +153,26 @@ export async function POST(req: Request) {
 
     if (bucketName) {
       try {
+        console.log(`[storage/upload] Attempting Firebase upload to bucket: ${bucketName}, path: ${storagePath}`);
         url = await uploadToFirebase(bucketName, storagePath, buffer, fileType);
       } catch (firebaseErr) {
-        console.error("[storage/upload] Firebase error:", firebaseErr);
+        const errMsg = firebaseErr instanceof Error ? firebaseErr.message : String(firebaseErr);
+        console.error("[storage/upload] Firebase error details:", { message: errMsg, error: firebaseErr });
+        
         if (!isProd) {
+          console.warn("[storage/upload] Falling back to local storage (Development only)");
           url = await uploadToLocalPublic(uploadPath, safeName, buffer);
           storage = "local";
         } else {
-          throw firebaseErr;
+          throw new Error(`Firebase upload failed: ${errMsg}`);
         }
       }
     } else if (!isProd) {
+      console.warn("[storage/upload] No bucket configured, using local storage (Development)");
       url = await uploadToLocalPublic(uploadPath, safeName, buffer);
       storage = "local";
     } else {
+      console.error("[storage/upload] Production error: FIREBASE_STORAGE_BUCKET missing");
       return NextResponse.json(
         { 
           error: "Konfigurasi Storage Hilang", 
@@ -173,6 +182,7 @@ export async function POST(req: Request) {
       );
     }
 
+    console.log(`[storage/upload] Success: ${url} (Type: ${storage})`);
     return NextResponse.json({ url, storage });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal mengunggah file";
