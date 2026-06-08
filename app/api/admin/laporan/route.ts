@@ -3,8 +3,38 @@ import { adminDb, FieldValue } from "@/lib/firebase/admin";
 
 export const runtime = "nodejs";
 
+function sanitizeUrl(url: string, path: string = "uploads") {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  if (url.startsWith("data:")) return url;
+  if (url.startsWith("blob:")) return url;
+  
+  // Jika lokal dan tidak mulai dengan /, tambahkan / dan pastikan path benar
+  let clean = url.trim();
+  if (!clean.startsWith("/")) {
+    // Jika tidak ada prefix path, tambahkan
+    if (!clean.includes("/")) {
+      clean = `/${path}/${clean}`;
+    } else {
+      clean = `/${clean}`;
+    }
+  }
+  return clean.replace(/\/+/g, "/");
+}
+
 function mapDoc(doc: FirebaseFirestore.DocumentSnapshot) {
   const d = doc.data()!;
+  const rawDocs = d.documents || [];
+  
+  // Sanitasi semua URL dokumen
+  const documents = rawDocs.map((doc: any) => ({
+    ...doc,
+    url: sanitizeUrl(doc.url, "laporan")
+  }));
+
+  // Backward compatibility untuk field 'foto' yang digunakan di beberapa komponen
+  const foto = d.foto ? sanitizeUrl(d.foto, "laporan") : (documents[0]?.url || "");
+
   return {
     id: doc.id,
     ticketId: d.ticketId,
@@ -27,7 +57,8 @@ function mapDoc(doc: FirebaseFirestore.DocumentSnapshot) {
     jamKejadian: d.jamKejadian || "",
     rt: d.rt || "",
     rw: d.rw || "",
-    documents: d.documents || [],
+    documents,
+    foto,
     extraForms: d.extraForms || [],
     blockchainHash: d.blockchainHash || "",
     timeline: (d.timeline || []).map((t: { status: string; note: string; at: string }) => t),

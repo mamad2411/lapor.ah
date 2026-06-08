@@ -82,6 +82,14 @@ const nextConfig = {
         ],
       },
       {
+        source: "/registrations/:path*",
+        headers: [
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+        ],
+      },
+      {
         source: "/uploads/:path*",
         headers: [
           { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },

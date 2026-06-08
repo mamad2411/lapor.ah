@@ -76,17 +76,23 @@ export async function verifyDocumentFromUrl(
   publicUrl: string
 ): Promise<DocumentVerificationResult> {
   const checks: DocumentVerificationResult["checks"] = [];
-  const relativePath = publicUrl.startsWith("/") ? publicUrl.slice(1) : publicUrl;
-  const filePath = path.join(process.cwd(), "public", relativePath);
-
   let buffer: Buffer;
+
   try {
-    buffer = await fs.readFile(filePath);
-  } catch {
+    if (publicUrl.startsWith("http")) {
+      const res = await fetch(publicUrl);
+      if (!res.ok) throw new Error("Gagal mengambil file remote");
+      buffer = Buffer.from(await res.arrayBuffer());
+    } else {
+      const relativePath = publicUrl.startsWith("/") ? publicUrl.slice(1) : publicUrl;
+      const filePath = path.join(process.cwd(), "public", relativePath);
+      buffer = await fs.readFile(filePath);
+    }
+  } catch (err) {
     return {
       valid: false,
       score: 0,
-      checks: [{ name: "file_exists", passed: false, detail: "File dokumen tidak ditemukan" }],
+      checks: [{ name: "file_exists", passed: false, detail: "File dokumen tidak ditemukan atau tidak dapat diakses" }],
       fileHash: "",
     };
   }

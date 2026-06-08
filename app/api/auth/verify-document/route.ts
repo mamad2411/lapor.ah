@@ -12,7 +12,10 @@ export async function POST(req: Request) {
   try {
     const { documentUrl } = schema.parse(await req.json());
 
-    if (!documentUrl.startsWith("/registrations/")) {
+    const isLocal = documentUrl.startsWith("/");
+    const isRemote = documentUrl.startsWith("http");
+
+    if (!isLocal && !isRemote) {
       return NextResponse.json(
         { error: "URL dokumen tidak valid" },
         { status: 400 }

@@ -30,7 +30,8 @@ async function uploadToLocalPublic(uploadPath: string, safeName: string, buffer:
   const dir = path.join(process.cwd(), "public", uploadPath);
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, safeName), buffer);
-  return `/${uploadPath}/${safeName}`;
+  // Pastikan selalu mulai dengan / untuk root-relative path
+  return `/${uploadPath}/${safeName}`.replace(/\/+/g, "/");
 }
 
 async function uploadToFirebase(
@@ -54,7 +55,9 @@ async function uploadToFirebase(
   });
 
   try {
-    return await getDownloadURL(fileRef);
+    const url = await getDownloadURL(fileRef);
+    if (!url.startsWith("http")) throw new Error("Invalid URL from getDownloadURL");
+    return url;
   } catch {
     return buildFirebaseMediaUrl(bucketName, storagePath, downloadToken);
   }
@@ -81,7 +84,8 @@ export async function POST(req: Request) {
     }
 
     const file = formData.get("file");
-    const uploadPath = ((formData.get("path") as string) || "uploads").replace(/[^a-zA-Z0-9/_-]/g, "");
+    let uploadPath = ((formData.get("path") as string) || "uploads").replace(/[^a-zA-Z0-9/_-]/g, "");
+    if (!uploadPath) uploadPath = "uploads";
 
     // Validasi tambahan untuk diskusi dan profile desa (tidak boleh ada audio/backsound di video)
     const isDiscussionOrProfile = uploadPath.includes("diskusi") || uploadPath.includes("desa") || uploadPath.includes("profile");
@@ -142,24 +146,29 @@ export async function POST(req: Request) {
     let url: string;
     let storage: "firebase" | "local" = "firebase";
 
+    const isProd = process.env.NODE_ENV === "production";
+
     if (bucketName) {
       try {
         url = await uploadToFirebase(bucketName, storagePath, buffer, fileType);
       } catch (firebaseErr) {
         console.error("[storage/upload] Firebase error:", firebaseErr);
-        if (process.env.NODE_ENV === "development") {
+        if (!isProd) {
           url = await uploadToLocalPublic(uploadPath, safeName, buffer);
           storage = "local";
         } else {
           throw firebaseErr;
         }
       }
-    } else if (process.env.NODE_ENV === "development") {
+    } else if (!isProd) {
       url = await uploadToLocalPublic(uploadPath, safeName, buffer);
       storage = "local";
     } else {
       return NextResponse.json(
-        { error: "FIREBASE_STORAGE_BUCKET belum dikonfigurasi." },
+        { 
+          error: "Konfigurasi Storage Hilang", 
+          hint: "FIREBASE_STORAGE_BUCKET belum diset di environment variables production (Netlify/Vercel)." 
+        },
         { status: 500 }
       );
     }
