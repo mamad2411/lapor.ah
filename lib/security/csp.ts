@@ -60,37 +60,12 @@ export function buildCsp(nonce: string): string {
       "data:",
     ],
 
-    "img-src": [
-      "'self'",
-      "data:",
-      "blob:",
-      // Firebase Storage
-      "https://firebasestorage.googleapis.com",
-      "https://storage.googleapis.com",
-      // Avatar / gravatar
-      "https://lh3.googleusercontent.com",
-      // Leaflet markers & external assets
-      "https://unpkg.com",
-      // Peta (Leaflet tiles)
-      "https://*.tile.openstreetmap.org",
-      "https://*.tile.openstreetmap.fr",
-    ],
+    "img-src": ["'self'", "data:", "blob:", "https:", "http:"],
 
     "connect-src": [
       "'self'",
-      // Firebase Realtime DB + Firestore + Auth
-      "https://*.googleapis.com",
-      "https://*.firebaseio.com",
-      "wss://*.firebaseio.com",
-      "https://identitytoolkit.googleapis.com",
-      "https://securetoken.googleapis.com",
-      // Firebase Storage
-      "https://firebasestorage.googleapis.com",
-      "https://storage.googleapis.com",
-      // reCAPTCHA verify
-      "https://www.google.com",
-      // Vercel Analytics
-      "https://vitals.vercel-insights.com",
+      "https:",
+      "wss:",
       ...(isProd ? [] : ["ws://localhost:*", "http://localhost:*"]),
     ],
 

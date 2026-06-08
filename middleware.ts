@@ -63,9 +63,9 @@ const BASE_SECURITY_HEADERS: Record<string, string> = {
   // HSTS — 2 tahun, termasuk subdomain, bisa masuk preload list Chromium
   "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
   // Isolasi origin
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Embedder-Policy": "require-corp",
-  "Cross-Origin-Resource-Policy": "same-origin",
+  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+  "Cross-Origin-Embedder-Policy": "unsafe-none",
+  "Cross-Origin-Resource-Policy": "cross-origin",
   // Cegah DNS prefetch untuk resource eksternal yang tidak dikenal
   "X-DNS-Prefetch-Control": "off",
 };
@@ -84,6 +84,7 @@ function applySecurityHeaders(
     pathname.startsWith("/diskusi/") ||
     pathname.startsWith("/laporan/") ||
     pathname.startsWith("/uploads/") ||
+    pathname.startsWith("/registrations/") ||
     /\.(png|jpg|jpeg|gif|webp|svg|mp4|webm|mp3|wav|ogg|pdf)$/i.test(pathname);
 
   for (const [k, v] of Object.entries(BASE_SECURITY_HEADERS)) {

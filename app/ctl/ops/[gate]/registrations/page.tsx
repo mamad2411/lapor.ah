@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
+import { collection, onSnapshot, query, where, orderBy } from "firebase/firestore";
+import { getDbClient } from "@/lib/firebase/client";
 import { Check, X, MapPin, ShieldOff, Eye, FileCheck, FileWarning, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,22 +41,46 @@ export default function OpsRegistrationsPage() {
   const [reason, setReason] = useState("");
   const [processing, setProcessing] = useState<string | null>(null);
 
-  const load = () => {
-    fetch("/api/ops/v1/registrations?status=pending_superadmin")
-      .then((r) => {
-        if (r.status === 401 || r.status === 403) {
-          setUnauthorized(true);
-          return null;
-        }
-        return r.json();
-      })
-      .then((d) => {
-        if (d) setRegs(d.registrations || []);
-      })
-      .finally(() => setLoading(false));
-  };
+  // Real-time listener untuk pendaftaran pending
+  useEffect(() => {
+    const db = getDbClient();
+    const q = query(
+      collection(db, "pending_registrations"),
+      where("status", "==", "pending_superadmin"),
+      orderBy("createdAt", "desc")
+    );
 
-  useEffect(() => { load(); }, []);
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map((doc) => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          name: d.name,
+          email: d.email,
+          phone: d.phone,
+          villageName: d.villageName,
+          villageId: d.villageId,
+          position: d.position,
+          status: d.status,
+          createdAt: d.createdAt?.toDate?.()?.toISOString?.() || new Date().toISOString(),
+          documentValid: d.documentVerification?.valid ?? null,
+          documentScore: d.documentVerification?.score ?? null,
+          latitude: d.latitude,
+          longitude: d.longitude,
+        } as Registration;
+      });
+      setRegs(list);
+      setLoading(false);
+    }, (err) => {
+      console.error("Registrations listener error:", err);
+      if (err.message.includes("permission-denied")) {
+        setUnauthorized(true);
+      }
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, []);
 
   async function handleVerify(id: string, action: "approve" | "reject") {
     if (action === "reject" && reason.length < 5) {
@@ -62,6 +88,10 @@ export default function OpsRegistrationsPage() {
       return;
     }
 
+    // Optimistic UI: hapus dari list sebelum request selesai
+    const originalRegs = [...regs];
+    setRegs((prev) => prev.filter((r) => r.id !== id));
+    
     setProcessing(id);
     try {
       const res = await fetch(`/api/ops/v1/registrations/${id}`, {
@@ -79,8 +109,9 @@ export default function OpsRegistrationsPage() {
       }
       setRejectId(null);
       setReason("");
-      load();
     } catch (err) {
+      // Rollback jika gagal
+      setRegs(originalRegs);
       toast.error(err instanceof Error ? err.message : "Gagal");
     } finally {
       setProcessing(null);

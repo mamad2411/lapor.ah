@@ -12,6 +12,15 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
+  collection,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  limit,
+} from "firebase/firestore";
+import { getDbClient } from "@/lib/firebase/client";
+import {
   Loader2, Trash2, Hash, Eye, MapPin, MessageSquare,
   Image as ImageIcon, Music, Mic, BarChart3, ChevronRight, X, ExternalLink, CornerDownRight,
 } from "lucide-react";
@@ -59,14 +68,31 @@ export default function OpsDiskusiPage() {
   const [loadingReplies, setLoadingReplies] = useState(false);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
 
-  const load = () => {
-    fetch("/api/ops/v1/diskusi")
-      .then((r) => r.json())
-      .then((d) => setPosts(d.posts || []))
-      .finally(() => setLoading(false));
-  };
+  // Real-time listener untuk posts (aktif saja)
+  useEffect(() => {
+    const db = getDbClient();
+    const q = query(
+      collection(db, "diskusi_posts"),
+      where("deletedAt", "==", null),
+      orderBy("createdAt", "desc"),
+      limit(200)
+    );
 
-  useEffect(() => { load(); }, []);
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.()?.toISOString?.() || new Date().toISOString(),
+      } as Post));
+      setPosts(list);
+      setLoading(false);
+    }, (err) => {
+      console.error("Posts listener error:", err);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, []);
 
   const openPreview = async (post: Post) => {
     setPreviewPost(post);
@@ -83,6 +109,11 @@ export default function OpsDiskusiPage() {
 
   async function handleDelete(id: string) {
     if (reason.length < 5) { toast.error("Alasan minimal 5 karakter"); return; }
+    
+    // Optimistic UI: hapus dari list sebelum request selesai
+    const originalPosts = [...posts];
+    setPosts((prev) => prev.filter((p) => p.id !== id));
+    
     setProcessing(true);
     try {
       const res = await fetch(`/api/ops/v1/diskusi/${id}`, {
@@ -96,8 +127,9 @@ export default function OpsDiskusiPage() {
       setDeleteId(null);
       setReason("");
       if (previewPost?.id === id) setPreviewPost(null);
-      load();
     } catch (err) {
+      // Rollback jika gagal
+      setPosts(originalPosts);
       toast.error(err instanceof Error ? err.message : "Gagal");
     } finally {
       setProcessing(false);

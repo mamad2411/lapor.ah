@@ -1,15 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useAdmin } from "./admin-context";
-import { KategoriChart } from "./kategori-chart";
-import { LaporanTrendChart } from "./laporan-trend-chart";
 import { NotifikasiList } from "./notifikasi-list";
 import { RecentLaporanList } from "./recent-laporan-list";
 import { SectionHeading } from "./section-heading";
 import { StatsOverview } from "./stats-overview";
 import { Spinner } from "@/components/ui/spinner";
 import { getAuthClient } from "@/lib/firebase/client";
+
+// Lazy load heavy chart components
+const LaporanTrendChart = dynamic(() => import("./laporan-trend-chart").then(m => m.LaporanTrendChart), { 
+  ssr: false,
+  loading: () => <div className="h-[240px] rounded-lg bg-muted/20 animate-pulse" />
+});
+
+const KategoriChart = dynamic(() => import("./kategori-chart").then(m => m.KategoriChart), { 
+  ssr: false,
+  loading: () => <div className="h-[240px] rounded-lg bg-muted/20 animate-pulse" />
+});
 
 export function DashboardHome() {
   const { profile, queryString } = useAdmin();

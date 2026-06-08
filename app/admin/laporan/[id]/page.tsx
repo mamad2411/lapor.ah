@@ -101,31 +101,41 @@ export default function AdminLaporanDetailPage({ params }: { params: Promise<{ i
   const [status, setStatus] = useState("");
   const [petugas, setPetugas] = useState("");
 
-  async function load() {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/admin/laporan?id=${id}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      const l: LaporanDetail = data.laporan;
-      setLaporan(l);
-      setStatus(l.status);
-      setPetugas(l.tanggapan?.petugas || profile?.name || "Kepala Desa");
+  // Real-time listener untuk detail laporan
+  useEffect(() => {
+    const db = getDbClient();
+    const unsub = onSnapshot(doc(db, "laporan", id), (snap) => {
+      if (snap.exists()) {
+        const d = snap.data();
+        const l = {
+          id: snap.id,
+          ...d,
+          kategoriAsli: d.kategoriAsli || d.kategori,
+          createdAt: d.createdAt?.toDate?.()?.toISOString?.() || new Date().toISOString(),
+          updatedAt: d.updatedAt?.toDate?.()?.toISOString?.() || new Date().toISOString(),
+        } as LaporanDetail;
+        
+        setLaporan(l);
+        setStatus(l.status);
+        if (!petugas) setPetugas(l.tanggapan?.petugas || profile?.name || "Kepala Desa");
 
-      // Auto mark dibaca
-      if (!l.adminRead) {
-        await fetch("/api/admin/laporan", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, status: l.status }),
-        });
+        // Auto mark dibaca (side effect)
+        if (!l.adminRead) {
+          fetch("/api/admin/laporan", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, status: l.status }),
+          });
+        }
       }
-    } finally {
       setLoading(false);
-    }
-  }
+    }, (err) => {
+      console.error("Laporan detail listener error:", err);
+      setLoading(false);
+    });
 
-  useEffect(() => { load(); }, [id]);
+    return () => unsub();
+  }, [id, profile?.name]);
 
   if (loading) {
     return (
@@ -316,13 +326,26 @@ export default function AdminLaporanDetailPage({ params }: { params: Promise<{ i
                 </Select>
                 <Button variant="outline" disabled={saving || status === laporan.status} onClick={async () => {
                   setSaving(true);
-                  await fetch("/api/admin/laporan", {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ id: laporan.id, status }),
-                  });
-                  await load();
-                  setSaving(false);
+                  const originalStatus = laporan.status;
+                  // Optimistic update
+                  setLaporan(prev => prev ? { ...prev, status } : null);
+                  
+                  try {
+                    const res = await fetch("/api/admin/laporan", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ id: laporan.id, status }),
+                    });
+                    if (!res.ok) throw new Error("Gagal update status");
+                    toast.success(`Status diperbarui ke ${STATUS_MAP[status]}`);
+                    await load();
+                  } catch (err) {
+                    setLaporan(prev => prev ? { ...prev, status: originalStatus } : null);
+                    setStatus(originalStatus);
+                    toast.error(err instanceof Error ? err.message : "Gagal update");
+                  } finally {
+                    setSaving(false);
+                  }
                 }}>
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
                 </Button>

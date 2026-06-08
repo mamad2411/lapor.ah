@@ -12,8 +12,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { collection, onSnapshot, query, where, orderBy, limit } from "firebase/firestore";
+import { getDbClient } from "@/lib/firebase/client";
 import { Spinner } from "@/components/ui/spinner";
 import { useAdmin } from "./admin-context";
+import { toast } from "sonner";
 
 type ApiLaporan = {
   id: string;
@@ -47,25 +50,54 @@ export function LaporanPageLive() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  const load = () => {
-    setLoading(true);
-    const q = villageId ? `?villageId=${villageId}` : "";
-    fetch(`/api/admin/laporan${q}`)
-      .then((r) => r.json())
-      .then((d) => setLaporan(d.laporan || []))
-      .finally(() => setLoading(false));
-  };
+  // Real-time listener untuk daftar laporan
+  useEffect(() => {
+    const db = getDbClient();
+    let q = query(collection(db, "laporan"), orderBy("createdAt", "desc"), limit(200));
+    
+    if (villageId) {
+      q = query(collection(db, "laporan"), where("villageId", "==", villageId), orderBy("createdAt", "desc"), limit(200));
+    }
 
-  useEffect(() => { load(); }, [villageId]);
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map((doc) => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          ...d,
+          kategoriAsli: d.kategoriAsli || d.kategori,
+          createdAt: d.createdAt?.toDate?.()?.toISOString?.() || new Date().toISOString(),
+        } as ApiLaporan;
+      });
+      setLaporan(list);
+      setLoading(false);
+    }, (err) => {
+      console.error("Laporan list listener error:", err);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [villageId]);
 
   async function updateStatus(id: string, status: string, e: React.MouseEvent) {
     e.stopPropagation();
-    await fetch("/api/admin/laporan", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status }),
-    });
-    load();
+    
+    // Optimistic Update
+    const original = [...laporan];
+    setLaporan(prev => prev.map(l => l.id === id ? { ...l, status } : l));
+
+    try {
+      const res = await fetch("/api/admin/laporan", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+      if (!res.ok) throw new Error("Gagal update");
+      toast.success(`Status diperbarui ke ${STATUS_MAP[status]}`);
+    } catch (err) {
+      setLaporan(original);
+      toast.error("Gagal memperbarui status");
+    }
   }
 
   function openDetail(id: string) {
