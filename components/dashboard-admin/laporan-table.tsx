@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PrioritasBadge, StatusBadge } from "./status-badge";
+import { useAdmin } from "./admin-context";
 import type { Laporan } from "./types";
 
 function formatDate(iso: string) {
@@ -33,6 +34,8 @@ interface LaporanTableProps {
 }
 
 export function LaporanTable({ laporan }: LaporanTableProps) {
+  const { adminHref } = useAdmin();
+
   if (laporan.length === 0) {
     return (
       <div className="border border-foreground/10 rounded-lg p-12 text-center">
@@ -65,7 +68,7 @@ export function LaporanTable({ laporan }: LaporanTableProps) {
                 <TableCell className="font-mono text-xs">{item.nomor}</TableCell>
                 <TableCell>
                   <Link
-                    href={`/admin/laporan/${item.id}`}
+                    href={adminHref(`/admin/laporan/${item.id}`)}
                     className="font-medium hover:underline underline-offset-4 line-clamp-1"
                   >
                     {item.judul}
@@ -99,7 +102,7 @@ export function LaporanTable({ laporan }: LaporanTableProps) {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem asChild>
-                        <Link href={`/admin/laporan/${item.id}`}>
+                        <Link href={adminHref(`/admin/laporan/${item.id}`)}>
                           <Eye className="size-4" />
                           Lihat detail
                         </Link>

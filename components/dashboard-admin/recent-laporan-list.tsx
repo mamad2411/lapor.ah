@@ -49,7 +49,7 @@ export function RecentLaporanList({ laporan, limit = 5 }: RecentLaporanListProps
           items.map((item) => (
             <Link
               key={item.id}
-              href={`/admin/laporan/${item.id}`}
+              href={adminHref(`/admin/laporan/${item.id}`)}
               className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4 hover:bg-foreground/[0.02] transition-colors"
             >
               <div className="flex-1 min-w-0">

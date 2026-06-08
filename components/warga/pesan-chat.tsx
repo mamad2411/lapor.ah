@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Send, Loader2, Bot, User, MessageCircle, TrendingUp } from "lucide-react";
+import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/firestore";
+import { getDbClient } from "@/lib/firebase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";import type { VillageOption, PesanMessage } from "@/lib/warga/types";
+import { Badge } from "@/components/ui/badge";
+import type { VillageOption, PesanMessage } from "@/lib/warga/types";
 
 interface TrendingItem {
   rank: number;
@@ -47,6 +50,24 @@ export function PesanChat() {
         }
       });
   }, [searchParams]);
+
+  // Real-time listener untuk messages
+  useEffect(() => {
+    if (!sessionId) {
+      setMessages([]);
+      return;
+    }
+
+    const db = getDbClient();
+    const unsub = onSnapshot(doc(db, "pesan_threads", sessionId), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setMessages(data.messages || []);
+      }
+    });
+
+    return () => unsub();
+  }, [sessionId]);
 
   // Load trending saat desa dipilih
   useEffect(() => {
@@ -88,8 +109,11 @@ export function PesanChat() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setSessionId(data.sessionId);
-      setMessages(data.messages);
+      
+      // Jika baru buat session
+      if (!sessionId && data.sessionId) {
+        setSessionId(data.sessionId);
+      }
 
       fetch(`/api/pesan/trending?villageId=${villageId}`)
         .then((r) => r.json())

@@ -80,6 +80,7 @@ function applySecurityHeaders(
   const isApi = pathname.startsWith("/api/");
   const isShared =
     isApi ||
+    pathname.startsWith("/admin") ||
     pathname.startsWith("/diskusi/") ||
     pathname.startsWith("/laporan/") ||
     pathname.startsWith("/uploads/") ||

@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAdmin } from "./admin-context";
+import { collection, onSnapshot, query, where, orderBy } from "firebase/firestore";
+import { getDbClient } from "@/lib/firebase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +13,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 type Msg = { role: "user" | "bot" | "admin"; content: string; at: string; templateId?: string };
-type Thread = { id: string; status: string; messages: Msg[]; updatedAt: string };
+type Thread = { id: string; status: string; messages: Msg[]; updatedAt: any };
 
 const STATUS_LABEL: Record<string, string> = {
   bot: "Dijawab Bot",
@@ -26,29 +28,37 @@ export function AdminPesanInbox() {
 
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Thread | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  function load() {
-    if (!villageId) return;
-    setLoading(true);
-    fetch(`/api/admin/pesan?villageId=${villageId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        const list: Thread[] = d.threads || [];
-        setThreads(list);
-        // Refresh selected jika ada
-        if (selected) {
-          const updated = list.find((t) => t.id === selected.id);
-          if (updated) setSelected(updated);
-        }
-      })
-      .finally(() => setLoading(false));
-  }
+  const selected = threads.find((t) => t.id === selectedId) || null;
 
-  useEffect(() => { load(); }, [villageId]);
+  useEffect(() => {
+    if (!villageId) return;
+
+    const db = getDbClient();
+    const q = query(
+      collection(db, "pesan_threads"),
+      where("villageId", "==", villageId),
+      orderBy("updatedAt", "desc")
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const list: Thread[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      } as Thread));
+      setThreads(list);
+      setLoading(false);
+    }, (err) => {
+      console.error("Inbox listener error:", err);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [villageId]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -68,7 +78,6 @@ export function AdminPesanInbox() {
       if (!res.ok) throw new Error(data.error);
       setReply("");
       toast.success("Balasan terkirim");
-      load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal mengirim");
     } finally {
@@ -104,7 +113,7 @@ export function AdminPesanInbox() {
               const lastMsg = t.messages[t.messages.length - 1];
               const isActive = selected?.id === t.id;
               return (
-                <button key={t.id} onClick={() => setSelected(t)}
+                <button key={t.id} onClick={() => setSelectedId(t.id)}
                   className={cn("w-full text-left px-4 py-3 hover:bg-muted/30 transition-colors",
                     isActive && "bg-muted/50",
                     t.status === "waiting_admin" && "border-l-2 border-foreground"

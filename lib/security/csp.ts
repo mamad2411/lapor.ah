@@ -69,6 +69,8 @@ export function buildCsp(nonce: string): string {
       "https://storage.googleapis.com",
       // Avatar / gravatar
       "https://lh3.googleusercontent.com",
+      // Leaflet markers & external assets
+      "https://unpkg.com",
       // Peta (Leaflet tiles)
       "https://*.tile.openstreetmap.org",
       "https://*.tile.openstreetmap.fr",
